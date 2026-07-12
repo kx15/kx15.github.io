@@ -1,0 +1,748 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Liang Kaixin — words, songs, systems</title>
+
+  <!-- Fonts: Big Shoulders (display), Archivo (body), IBM Plex Mono (labels),
+       Noto Sans SC (the giant Chinese section glyphs) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@700;800;900&family=Archivo:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Noto+Sans+SC:wght@900&display=swap" rel="stylesheet">
+
+  <style>
+    /* ============================================================
+       DESIGN TOKENS — the whole theme lives here
+       ============================================================ */
+    :root {
+      --ink: #0A0E1E;         /* deep ink-navy canvas */
+      --ink-soft: #11162B;    /* lighter panel */
+      --paper: #F2EFE9;       /* warm off-white text */
+      --paper-dim: #C0BEB5;   /* muted text, kept readable on navy */
+      --yellow: #FFD84D;      /* highlighter yellow */
+      --magenta: #FF4FA3;     /* electric magenta — the second voice */
+      --line: rgba(242,239,233,0.14);
+
+      --font-display: "Big Shoulders Display", sans-serif;
+      --font-body: "Archivo", sans-serif;
+      --font-mono: "IBM Plex Mono", monospace;
+      --font-cjk: "Noto Sans SC", sans-serif;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html { scroll-behavior: smooth; overflow-x: clip; } /* 'clip' stops the bleeding glyph from creating sideways scroll */
+    body {
+      background: var(--ink);
+      color: var(--paper);
+      font-family: var(--font-body);
+      font-size: 17px;
+      line-height: 1.65;
+      -webkit-font-smoothing: antialiased;
+      overflow-x: hidden; /* rotated/oversized elements must never cause sideways scroll */
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+      *, *::before, *::after { animation: none !important; transition: none !important; }
+    }
+
+    .wrap { max-width: 1100px; margin: 0 auto; padding: 0 24px; }
+    section { padding: 110px 0; position: relative; }
+
+    a:focus-visible { outline: 2px solid var(--yellow); outline-offset: 3px; }
+
+    /* ============================================================
+       SIGNATURE 1: giant CJK glyphs
+       Each section is marked by one huge Chinese character —
+       写 (write) 唱 (sing) 造 (build) 讲 (talk).
+       It sits behind the content like a watermark stamp.
+       ============================================================ */
+    .glyph {
+      position: absolute;
+      top: 40px;
+      right: -20px;
+      font-family: var(--font-cjk);
+      font-weight: 900;
+      font-size: clamp(180px, 30vw, 380px);
+      line-height: 1;
+      color: transparent;
+      -webkit-text-stroke: 1.5px rgba(242,239,233,0.16); /* outline only */
+      user-select: none;
+      pointer-events: none;
+      z-index: 0;
+    }
+    section:nth-of-type(even) .glyph { -webkit-text-stroke-color: rgba(255,79,163,0.25); }
+    .wrap { position: relative; z-index: 1; } /* content always above the glyph */
+
+    /* ============================================================
+       SIGNATURE 2: highlighter sweep (kept from v1 — it's you)
+       ============================================================ */
+    .clip {
+      position: relative;
+      white-space: nowrap;
+      color: var(--ink);
+      padding: 0 0.12em;
+      z-index: 0;
+      transition: color 0.15s ease 0.45s; /* darkens only after the sweep covers it */
+    }
+    .clip::before {
+      content: "";
+      position: absolute;
+      inset: 0.06em -0.02em;
+      background: var(--yellow);
+      transform: scaleX(0);
+      transform-origin: left;
+      transition: transform 0.7s cubic-bezier(0.22, 1, 0.36, 1);
+      z-index: -1;
+    }
+    .clip.pink::before { background: var(--magenta); }
+    .clip.pink { transition-delay: 0.45s; }
+    .clip.swept::before { transform: scaleX(1); }
+    .clip:not(.swept) { color: var(--paper); }
+
+    /* Section eyebrow labels */
+    .slug {
+      font-family: var(--font-mono);
+      font-size: 12px;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--yellow);
+      display: block;
+      margin-bottom: 18px;
+    }
+    h2 {
+      font-family: var(--font-display);
+      font-weight: 800;
+      font-size: clamp(38px, 6vw, 64px);
+      line-height: 0.95;
+      text-transform: uppercase;
+      margin-bottom: 36px;
+    }
+
+    /* ============================================================
+       NAV
+       ============================================================ */
+    nav {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+      background: rgba(10,14,30,0.85);
+      backdrop-filter: blur(10px);
+      border-bottom: 1px solid var(--line);
+    }
+    .nav-inner {
+      max-width: 1100px; margin: 0 auto; padding: 16px 24px;
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    .nav-name {
+      font-family: var(--font-display); font-weight: 800; font-size: 20px;
+      letter-spacing: 0.04em; text-transform: uppercase;
+      color: var(--paper); text-decoration: none;
+    }
+    .nav-links { display: flex; gap: 28px; }
+    .nav-links a {
+      font-family: var(--font-mono); font-size: 13px; text-transform: uppercase;
+      letter-spacing: 0.1em; color: var(--paper-dim); text-decoration: none;
+      transition: color 0.2s;
+    }
+    .nav-links a:hover, .nav-links a:focus-visible { color: var(--magenta); }
+    @media (max-width: 640px) { .nav-links { display: none; } }
+
+    /* ============================================================
+       HERO — identity statement, not a pitch
+       ============================================================ */
+    .hero {
+      min-height: 100vh;
+      display: flex; flex-direction: column; justify-content: center;
+      padding-top: 110px;
+    }
+    .hero h1 {
+      font-family: var(--font-display);
+      font-weight: 900;
+      font-size: clamp(42px, 9.5vw, 120px);
+      line-height: 0.92;
+      text-transform: uppercase;
+      max-width: 16ch;
+    }
+    .hero-sub {
+      margin-top: 30px; max-width: 52ch;
+      font-size: clamp(17px, 2vw, 20px);
+      color: var(--paper-dim);
+    }
+    .hero-sub strong { color: var(--paper); font-weight: 600; }
+    .scroll-cue {
+      margin-top: 48px;
+      font-family: var(--font-mono); font-size: 12px;
+      letter-spacing: 0.2em; text-transform: uppercase;
+      color: var(--paper-dim);
+    }
+    .scroll-cue span {
+      display: inline-block;
+      animation: bob 1.8s ease-in-out infinite;
+      color: var(--magenta);
+      margin-right: 10px;
+    }
+    @keyframes bob { 0%,100% { transform: translateY(0); } 50% { transform: translateY(6px); } }
+
+    /* ---- "Currently" ticker: life in motion, not career milestones ---- */
+    .wire {
+      margin-top: 64px;
+      border-top: 1px solid var(--line);
+      border-bottom: 1px solid var(--line);
+      overflow: hidden;
+      padding: 14px 0;
+    }
+    .wire-track { display: flex; gap: 56px; width: max-content; animation: ticker 48s linear infinite; }
+    .wire:hover .wire-track { animation-play-state: paused; }
+    .wire-item { font-family: var(--font-mono); font-size: 13.5px; color: var(--paper-dim); white-space: nowrap; }
+    .wire-item b { color: var(--magenta); font-weight: 500; margin-right: 10px; }
+    @keyframes ticker { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+
+    /* ============================================================
+       MARQUEE BAND — big scrolling zine text between sections
+       ============================================================ */
+    .marquee {
+      border-top: 1px solid var(--line);
+      border-bottom: 1px solid var(--line);
+      overflow: hidden;
+      padding: 18px 0;
+      background: var(--ink-soft);
+    }
+    .marquee-track {
+      display: flex; gap: 64px; width: max-content;
+      animation: ticker 30s linear infinite;
+      font-family: var(--font-display);
+      font-weight: 800;
+      font-size: clamp(26px, 4vw, 44px);
+      text-transform: uppercase;
+      letter-spacing: 0.02em;
+      color: transparent;
+      -webkit-text-stroke: 1px var(--paper-dim); /* outline type = zine energy */
+      white-space: nowrap;
+    }
+    .marquee-track em { font-style: normal; color: var(--yellow); -webkit-text-stroke: 0; }
+
+    /* ============================================================
+       WHO — short, human, one line of day job
+       ============================================================ */
+    .who-lede {
+      font-size: clamp(20px, 2.6vw, 26px);
+      line-height: 1.5;
+      max-width: 42ch;
+    }
+    .who-side {
+      margin-top: 36px;
+      font-size: 15.5px;
+      color: var(--paper-dim);
+      max-width: 52ch;
+      border-left: 3px solid var(--magenta);
+      padding-left: 20px;
+    }
+
+    /* ============================================================
+       MEDIUMS — the three things I make, as tilted cards
+       ============================================================ */
+    .mediums {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 28px;
+    }
+    .medium {
+      background: var(--ink-soft);
+      border: 1px solid var(--line);
+      padding: 36px 28px 40px;
+      transition: transform 0.3s cubic-bezier(0.22,1,0.36,1), border-color 0.3s;
+    }
+    /* Slight alternating rotation — hand-placed, zine-like */
+    .medium:nth-child(1) { transform: rotate(-1.2deg); }
+    .medium:nth-child(2) { transform: rotate(0.8deg) translateY(14px); }
+    .medium:nth-child(3) { transform: rotate(-0.6deg); }
+    .medium:hover { transform: rotate(0deg) translateY(-6px); border-color: var(--yellow); }
+    .medium .m-glyph {
+      font-family: var(--font-cjk); font-weight: 900;
+      font-size: 54px; line-height: 1;
+      color: var(--magenta);
+      display: block; margin-bottom: 18px;
+    }
+    .medium h3 {
+      font-family: var(--font-display); font-weight: 800;
+      font-size: 30px; text-transform: uppercase; margin-bottom: 12px;
+    }
+    .medium p { font-size: 15.5px; color: var(--paper-dim); }
+    @media (max-width: 820px) {
+      .mediums { grid-template-columns: 1fr; }
+      .medium:nth-child(2) { transform: rotate(0.8deg); }
+    }
+
+    /* ============================================================
+       MAKES — things, not case studies
+       ============================================================ */
+    .make {
+      border: 1px solid var(--line);
+      padding: 36px 32px;
+      margin-bottom: 22px;
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 32px;
+      align-items: start;
+      transition: border-color 0.25s, transform 0.25s;
+    }
+    .make:hover { border-color: var(--magenta); transform: translateX(6px); }
+    .make .num {
+      font-family: var(--font-mono);
+      font-size: 13px;
+      color: var(--yellow);
+      padding-top: 8px;
+    }
+    .make h3 {
+      font-family: var(--font-display); font-weight: 800;
+      font-size: 30px; line-height: 1; text-transform: uppercase;
+      margin-bottom: 10px;
+    }
+    .make p { font-size: 15.5px; color: var(--paper-dim); max-width: 62ch; }
+    @media (max-width: 720px) { .make { grid-template-columns: 1fr; gap: 10px; padding: 26px 22px; } }
+
+    /* ============================================================
+       DATELINE STRIP — cities filed from, journalist-style
+       ============================================================ */
+    .datelines {
+      margin-top: 40px;
+      font-family: var(--font-mono);
+      font-size: 13px;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--paper-dim);
+    }
+    .datelines b { color: var(--yellow); font-weight: 500; margin-right: 12px; }
+    .datelines span { color: var(--paper); }
+
+    /* ============================================================
+       FIELD NOTES — numbered zine-list of true records
+       ============================================================ */
+    .note {
+      display: grid;
+      grid-template-columns: 56px 1fr;
+      gap: 20px;
+      align-items: baseline;
+      padding: 22px 4px;
+      border-bottom: 1px solid var(--line);
+    }
+    .note:first-of-type { border-top: 1px solid var(--line); }
+    .note .n {
+      font-family: var(--font-mono);
+      font-size: 13px;
+      color: var(--magenta);
+    }
+    .note p { font-size: 16.5px; color: var(--paper); }
+    .note p em { font-style: normal; color: var(--paper-dim); }
+    .note:hover .n { color: var(--yellow); }
+
+    /* Thumbnail link inside a field note — a clipping pinned to the page */
+    .note-clip {
+      display: inline-block;
+      margin-top: 14px;
+      position: relative;
+      border: 1px solid var(--line);
+      line-height: 0;
+      transition: border-color 0.25s, transform 0.25s;
+      transform: rotate(-1deg); /* pinned-not-pasted */
+    }
+    .note-clip:hover, .note-clip:focus-visible {
+      border-color: var(--yellow);
+      transform: rotate(0deg) translateY(-3px);
+    }
+    .note-clip .frame { position: relative; display: block; }
+    .note-clip img { display: block; width: 260px; max-width: 100%; }
+    .note-clip .play {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(10,14,30,0.35);
+      color: var(--paper);
+      font-size: 34px;
+      transition: background 0.25s;
+    }
+    .note-clip:hover .play { background: rgba(10,14,30,0.15); }
+    .note-clip .cap {
+      display: block;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--paper-dim);
+      padding: 8px 10px;
+      line-height: 1.4;
+      background: var(--ink-soft);
+    }
+    .note-clip:hover .cap { color: var(--yellow); }
+
+    /* ============================================================
+       WRITING — published commentaries, styled like bylined clippings
+       ============================================================ */
+    .pub {
+      display: block;
+      border: 1px solid var(--line);
+      padding: 30px 32px;
+      margin-bottom: 18px;
+      text-decoration: none;
+      color: var(--paper);
+      transition: border-color 0.25s, transform 0.25s;
+    }
+    .pub:hover, .pub:focus-visible { border-color: var(--yellow); transform: translateX(6px); }
+    .pub .pub-meta {
+      font-family: var(--font-mono);
+      font-size: 12px;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--magenta);
+      display: block;
+      margin-bottom: 10px;
+    }
+    .pub h3 {
+      font-family: var(--font-display);
+      font-weight: 800;
+      font-size: clamp(22px, 3.4vw, 30px);
+      line-height: 1.05;
+      text-transform: uppercase;
+      margin-bottom: 8px;
+    }
+    /* Chinese titles need the CJK face — the display face has no CJK glyphs */
+    .pub h3.zh {
+      font-family: var(--font-cjk);
+      font-weight: 900;
+      text-transform: none;
+      letter-spacing: 0.02em;
+    }
+    .pub p { font-size: 15px; color: var(--paper-dim); max-width: 62ch; }
+    .pub .read { 
+      font-family: var(--font-mono); font-size: 12px;
+      letter-spacing: 0.1em; text-transform: uppercase;
+      color: var(--yellow); display: inline-block; margin-top: 14px;
+    }
+
+    /* ============================================================
+       SAY HI
+       ============================================================ */
+    .contact-email {
+      font-family: var(--font-display); font-weight: 800;
+      font-size: clamp(26px, 5vw, 54px); text-transform: uppercase;
+      color: var(--paper); text-decoration: none;
+      display: inline-block; margin: 20px 0 36px;
+      border-bottom: 4px solid var(--magenta);
+      transition: color 0.2s; word-break: break-all;
+    }
+    .contact-email:hover, .contact-email:focus-visible { color: var(--magenta); }
+    .social-links { display: flex; gap: 20px; flex-wrap: wrap; }
+    .social-links a {
+      font-family: var(--font-mono); font-size: 13px;
+      letter-spacing: 0.12em; text-transform: uppercase;
+      color: var(--paper-dim); text-decoration: none;
+      border: 1px solid var(--line); padding: 12px 22px;
+      transition: all 0.2s;
+    }
+    .social-links a:hover, .social-links a:focus-visible {
+      color: var(--ink); background: var(--yellow); border-color: var(--yellow);
+    }
+
+    footer {
+      border-top: 1px solid var(--line);
+      padding: 28px 0;
+      font-family: var(--font-mono); font-size: 12px; color: var(--paper-dim);
+    }
+
+    /* Scroll reveal */
+    .reveal { opacity: 0; transform: translateY(24px); transition: opacity 0.7s ease, transform 0.7s ease; }
+    .reveal.visible { opacity: 1; transform: translateY(0); }
+  </style>
+</head>
+<body>
+
+  <!-- ============ NAV ============ -->
+  <nav>
+    <div class="nav-inner">
+      <a href="#top" class="nav-name">Liang Kaixin</a>
+      <div class="nav-links">
+        <a href="#who">Who</a>
+        <a href="#mediums">Mediums</a>
+        <a href="#makes">Makes</a>
+        <a href="#writing">Writing</a>
+        <a href="#notes">Notes</a>
+        <a href="#hi">Say Hi</a>
+      </div>
+    </div>
+  </nav>
+
+  <!-- ============ HERO ============ -->
+  <header class="hero wrap" id="top">
+    <h1><span class="clip pink">Words.</span> <span class="clip">Systems.</span> Songs.</h1>
+    <p class="hero-sub">
+      <strong>I'm Kaixin.</strong> I've spent my life in the business of getting ideas across —
+      in newsrooms, in policy rooms, and lately, in code: bots, pipelines, and small
+      machines that make everyday life run smoother. This is the version of me that
+      doesn't fit on a name card.
+    </p>
+    <p class="scroll-cue"><span>↓</span>Scroll for the rest</p>
+
+    <!-- "Currently" ticker — life, not milestones -->
+    <div class="wire" aria-hidden="true">
+      <div class="wire-track">
+        <!-- copy 1 -->
+        <span class="wire-item"><b>NOW //</b> Teaching a Telegram bot the campus shuttle timetable</span>
+        <span class="wire-item"><b>NOW //</b> Automating the boring parts of the work week</span>
+        <span class="wire-item"><b>NOW //</b> Halfway through a master's in AI, entirely by choice</span>
+        <span class="wire-item"><b>NOW //</b> Occasionally writing a hook in Singlish</span>
+        <span class="wire-item"><b>NOW //</b> On the mat, attempting stillness</span>
+        <!-- copy 2 (identical, for the seamless loop) -->
+        <span class="wire-item"><b>NOW //</b> Teaching a Telegram bot the campus shuttle timetable</span>
+        <span class="wire-item"><b>NOW //</b> Automating the boring parts of the work week</span>
+        <span class="wire-item"><b>NOW //</b> Halfway through a master's in AI, entirely by choice</span>
+        <span class="wire-item"><b>NOW //</b> Occasionally writing a hook in Singlish</span>
+        <span class="wire-item"><b>NOW //</b> On the mat, attempting stillness</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- ============ MARQUEE BAND ============ -->
+  <div class="marquee" aria-hidden="true">
+    <div class="marquee-track">
+      <span>Made in Singapore <em>★</em> Bilingual by default <em>★</em> Deadline-trained <em>★</em> Curious on purpose <em>★</em></span>
+      <span>Made in Singapore <em>★</em> Bilingual by default <em>★</em> Deadline-trained <em>★</em> Curious on purpose <em>★</em></span>
+    </div>
+  </div>
+
+  <!-- ============ WHO ============ -->
+  <section id="who">
+    <span class="glyph" aria-hidden="true">讲</span>
+    <div class="wrap reveal">
+      <span class="slug">01 — Who</span>
+      <h2>Professionally curious. <br><span class="clip">Incurably</span> so.</h2>
+      <p class="who-lede">
+        Former broadcast journalist. Current communications person by day.
+        The rest of the time: builder of bots and productivity tools, occasional
+        songwriter, and student of how Singapore talks to itself — in four
+        languages and one glorious creole.
+      </p>
+      <p class="who-side">
+        The through-line, if you need one: I'm interested in how meaning travels.
+        Sometimes that's a headline. Sometimes it's a hook in Hokkien-inflected
+        Singlish. Sometimes it's a pipeline that turns chaos into something readable.
+        Same instinct, different instruments.
+      </p>
+      <p class="datelines"><b>FILED FROM //</b> <span>Beijing · Bangkok · Shanghai · Fukuoka · Hong Kong · Singapore</span></p>
+    </div>
+  </section>
+
+  <!-- ============ MEDIUMS ============ -->
+  <section id="mediums">
+    <span class="glyph" aria-hidden="true">写</span>
+    <div class="wrap reveal">
+      <span class="slug">02 — Mediums</span>
+      <h2>Three ways of <span class="clip pink">saying</span> things</h2>
+      <div class="mediums">
+        <div class="medium">
+          <span class="m-glyph" aria-hidden="true">写</span>
+          <h3>Words</h3>
+          <p>Trained on deadlines in a national newsroom. I write fast, edit ruthlessly, and believe every sentence should earn its place — including this one.</p>
+        </div>
+        <div class="medium">
+          <span class="m-glyph" aria-hidden="true">造</span>
+          <h3>Systems</h3>
+          <p>My favourite medium lately. I build bots, pipelines, and productivity tools with code and language models — machines that read, sort, fetch, and format, so humans can keep the thinking parts. Craft, just with different materials.</p>
+        </div>
+        <div class="medium">
+          <span class="m-glyph" aria-hidden="true">唱</span>
+          <h3>Songs</h3>
+          <p>A side language. Original music in English, Mandarin, and the Singlish in between — written for the joy of it.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ MAKES ============ -->
+  <section id="makes">
+    <span class="glyph" aria-hidden="true">造</span>
+    <div class="wrap reveal">
+      <span class="slug">03 — Recent Makes</span>
+      <h2>Things that <span class="clip">exist</span> now</h2>
+
+      <article class="make">
+        <span class="num">001</span>
+        <div>
+          <h3>The Bus Bots</h3>
+          <p>Two Telegram bots that know when your bus is actually coming — one for the NUS campus shuttle, one for Singapore's public buses. Built in Python, self-hosted, and quietly saving strangers from staring at bus stops. Small problems, real solutions — my favourite kind of project.</p>
+          <p style="margin-top: 10px;">
+            <a href="https://t.me/NUS_buses_bot" target="_blank" rel="noopener" style="color: var(--yellow); text-decoration: none; font-family: var(--font-mono); font-size: 13px; letter-spacing: 0.08em; text-transform: uppercase; margin-right: 24px;">@NUS_buses_bot →</a>
+            <a href="https://t.me/SGBusIsHere_Bot" target="_blank" rel="noopener" style="color: var(--yellow); text-decoration: none; font-family: var(--font-mono); font-size: 13px; letter-spacing: 0.08em; text-transform: uppercase;">@SGBusIsHere_Bot →</a>
+          </p>
+        </div>
+      </article>
+
+      <article class="make">
+        <span class="num">002</span>
+        <div>
+          <h3>Productivity machines</h3>
+          <p>Nights-and-weekends automations: pipelines that read and format the news, workflow bots that chain tools together, and a small project tracker built on Supabase and Next.js. If a task is boring twice, it gets automated the third time.</p>
+        </div>
+      </article>
+
+      <article class="make">
+        <span class="num">003</span>
+        <div>
+          <h3>A degree, in progress</h3>
+          <p>Master's in AI &amp; Innovation at NUS, taken part-time and on purpose — because the tools reshaping my field deserved more than a passing acquaintance.</p>
+        </div>
+      </article>
+
+      <article class="make">
+        <span class="num">004</span>
+        <div>
+          <h3>Songs in two-and-a-half languages</h3>
+          <p>A side catalogue of original music — English, Mandarin, and Singlish, the half. Made for fun, kept because some choruses deserve to exist. <a href="https://suno.com/@kxliang" target="_blank" rel="noopener" style="color: var(--yellow); text-decoration: none; font-family: var(--font-mono); font-size: 13px; letter-spacing: 0.08em; text-transform: uppercase;">Listen →</a></p>
+        </div>
+      </article>
+    </div>
+  </section>
+
+  <!-- ============ WRITING ============ -->
+  <section id="writing">
+    <span class="glyph" aria-hidden="true">论</span>
+    <div class="wrap reveal">
+      <span class="slug">04 — On the Record</span>
+      <h2>Published <span class="clip pink">opinions</span>, held lightly</h2>
+
+      <a class="pub" href="https://www.channelnewsasia.com/commentary/budget-2026-ai-upskilling-mid-career-workers-5929936" target="_blank" rel="noopener">
+        <span class="pub-meta">CNA Commentary — Feb 2026 — English</span>
+        <h3>Anxious about AI, I went back to school and this is what I learned</h3>
+        <p>On mid-career anxiety, night classes, dy/dx after 20 years, and why upskilling is painful but worth it.</p>
+        <span class="read">Read on CNA →</span>
+      </a>
+
+      <a class="pub" href="https://www.zaobao.com.sg/forum/views/story20230218-1364278" target="_blank" rel="noopener">
+        <span class="pub-meta">联合早报 — Feb 2023 — 中文</span>
+        <h3 class="zh">罗宾汉的预算案？</h3>
+        <p>A Robin Hood budget? On wealth, taxes, and what a fair social compact asks of those who have more.</p>
+        <span class="read">Read on Zaobao →</span>
+      </a>
+
+      <a class="pub" href="https://www.zaobao.com.sg/forum/views/story20220928-1317347" target="_blank" rel="noopener">
+        <span class="pub-meta">联合早报 — Sep 2022 — 中文</span>
+        <h3 class="zh">霸道总裁治国论</h3>
+        <p>What K-drama's domineering CEO trope can teach us about leadership styles and Singapore's next social compact.</p>
+        <span class="read">Read on Zaobao →</span>
+      </a>
+
+      <a class="pub" href="https://www.zaobao.com.sg/forum/views/story20220614-1282746" target="_blank" rel="noopener">
+        <span class="pub-meta">联合早报 — Jun 2022 — 中文</span>
+        <h3 class="zh">重新构想新加坡与黑天鹅</h3>
+        <p>Black swans, black elephants, and why imagining Singapore's futures beats being surprised by them.</p>
+        <span class="read">Read on Zaobao →</span>
+      </a>
+    </div>
+  </section>
+
+  <!-- ============ FIELD NOTES ============ -->
+  <section id="notes">
+    <span class="glyph" aria-hidden="true">记</span>
+    <div class="wrap reveal">
+      <span class="slug">05 — Field Notes</span>
+      <h2>True <span class="clip">records</span>, lightly kept</h2>
+
+      <div class="note">
+        <span class="n">N.01</span>
+        <div>
+          <p>Went undercover among Beijing's iPhone scalpers. <em>The story earned a Star Awards nomination; the scalpers, presumably, moved on.</em></p>
+          <a class="note-clip" href="https://www.youtube.com/watch?v=-st-VUO7RTA" target="_blank" rel="noopener">
+            <span class="frame">
+              <img src="https://img.youtube.com/vi/-st-VUO7RTA/hqdefault.jpg" alt="Video still from the undercover report on Beijing iPhone scalpers" loading="lazy">
+              <span class="play" aria-hidden="true">▶</span>
+            </span>
+            <span class="cap">Watch the story ↗</span>
+          </a>
+        </div>
+      </div>
+      <div class="note">
+        <span class="n">N.02</span>
+        <p>Covered Bangkok's yellow-shirt protests solo — no camera crew. <em>Just a reporter, a camera, and a deadline.</em></p>
+      </div>
+      <div class="note">
+        <span class="n">N.03</span>
+        <p>Filed broadcast stories in two languages — English for CNA, Mandarin for Channel 8. <em>Same story, twice the deadlines.</em></p>
+      </div>
+      <div class="note">
+        <span class="n">N.04</span>
+        <p>Once grew a Facebook page 60x. <em>Still can't fully explain the algorithm.</em></p>
+      </div>
+      <div class="note">
+        <span class="n">N.05</span>
+        <p>Former president of a university snooker &amp; pool club. <em>Undefeated, in memory only.</em></p>
+      </div>
+      <div class="note">
+        <span class="n">N.06</span>
+        <p>Taught primary school kids in Fukuoka the fundamentals of journalism. <em>They asked better questions than most press conferences.</em></p>
+      </div>
+      <div class="note">
+        <span class="n">N.07</span>
+        <div>
+          <p>Reported from a Maoist women's militia training camp in Nepal. <em>Rifles, drills, and a long walk in.</em></p>
+          <!-- NOTE: Google Drive is unreliable as an image host (see chat).
+               If this doesn't load, drop the image into your repo as
+               /images/nepal.jpg and change src to "images/nepal.jpg" -->
+          <a class="note-clip" href="https://drive.google.com/file/d/0B_jpCf4xeULxMmtvLUV4eWRFTWs/view?usp=drive_link&amp;resourcekey=0-yz60YjaE0fOEH0fPh4NNng" target="_blank" rel="noopener">
+            <span class="frame">
+              <img src="https://drive.google.com/thumbnail?id=0B_jpCf4xeULxMmtvLUV4eWRFTWs&sz=w520" alt="Reporting from a Maoist women's militia training camp in Nepal" loading="lazy">
+            </span>
+            <span class="cap">See the story ↗</span>
+          </a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ SAY HI ============ -->
+  <section id="hi">
+    <span class="glyph" aria-hidden="true">唱</span>
+    <div class="wrap reveal">
+      <span class="slug">06 — Say Hi</span>
+      <h2>No agenda. <span class="clip pink">Just</span> hello.</h2>
+      <a class="contact-email" href="mailto:liangkaixin@rocketmail.com">liangkaixin@rocketmail.com</a>
+      <div class="social-links">
+        <a href="https://www.linkedin.com/in/kaixin-liang" target="_blank" rel="noopener">LinkedIn ↗</a>
+        <a href="https://github.com/kx15" target="_blank" rel="noopener">GitHub ↗</a>
+        <a href="https://www.tiktok.com/@liangkaixin_" target="_blank" rel="noopener">TikTok ↗</a>
+        <a href="https://www.instagram.com/liangkaixin" target="_blank" rel="noopener">Instagram ↗</a>
+        <!-- Suno music profile -->
+        <a href="https://suno.com/@kxliang" target="_blank" rel="noopener">The Music ↗</a>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <div class="wrap">© 2026 Liang Kaixin — Made in Singapore. Occasionally in Singlish.</div>
+  </footer>
+
+  <!-- ============ JS: reveals + highlight sweeps ============ -->
+  <script>
+    // Sections fade up when 15% visible
+    const revealObserver = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (entry.isIntersecting) {
+          entry.target.classList.add("visible");
+          revealObserver.unobserve(entry.target);
+        }
+      });
+    }, { threshold: 0.15 });
+    document.querySelectorAll(".reveal").forEach((el) => revealObserver.observe(el));
+
+    // Highlighter sweeps — low threshold so they fire reliably on phones
+    const clipObserver = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (entry.isIntersecting) {
+          setTimeout(() => entry.target.classList.add("swept"), 350);
+          clipObserver.unobserve(entry.target);
+        }
+      });
+    }, { threshold: 0.2 });
+    document.querySelectorAll(".clip").forEach((el) => clipObserver.observe(el));
+  </script>
+</body>
+</html>
