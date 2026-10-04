@@ -1,0 +1,964 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Makan Map — Instagram food finds, on a map</title>
+  <meta name="description" content="Save food recommendations from Instagram posts, pin them on a map, and send them to Google Maps.">
+  <meta name="theme-color" content="#0A0E1E">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icon-192.png">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@800;900&family=Archivo:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+
+  <style>
+    /* Same tokens as the main site */
+    :root {
+      --ink: #0A0E1E;
+      --ink-soft: #11162B;
+      --ink-softer: #1A2040;
+      --paper: #F2EFE9;
+      --paper-dim: #C0BEB5;
+      --yellow: #FFD84D;
+      --magenta: #FF4FA3;
+      --green: #5BE3A4;
+      --line: rgba(242,239,233,0.14);
+
+      --font-display: "Big Shoulders Display", sans-serif;
+      --font-body: "Archivo", sans-serif;
+      --font-mono: "IBM Plex Mono", monospace;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { height: 100%; }
+    body {
+      background: var(--ink);
+      color: var(--paper);
+      font-family: var(--font-body);
+      font-size: 15px;
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+      overflow: hidden;
+    }
+    a { color: var(--yellow); }
+    button, input, textarea, select { font: inherit; color: inherit; }
+
+    .app {
+      display: grid;
+      grid-template-columns: minmax(340px, 440px) 1fr;
+      height: 100vh;
+      height: 100dvh;
+    }
+
+    /* ---------- sidebar ---------- */
+    .panel {
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      border-right: 1px solid var(--line);
+      background: var(--ink);
+    }
+    header.top {
+      padding: 18px 20px 12px;
+      border-bottom: 1px solid var(--line);
+    }
+    .brand {
+      display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
+    }
+    h1 {
+      font-family: var(--font-display);
+      font-weight: 900;
+      font-size: 34px;
+      line-height: 1;
+      letter-spacing: 0.01em;
+      text-transform: uppercase;
+    }
+    h1 span { color: var(--yellow); }
+    .home {
+      font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.08em;
+      text-transform: uppercase; color: var(--paper-dim); text-decoration: none;
+    }
+    .home:hover { color: var(--yellow); }
+    .tagline { color: var(--paper-dim); font-size: 13px; margin-top: 6px; }
+
+    .tabs { display: flex; gap: 4px; margin-top: 14px; }
+    .tab {
+      flex: 1;
+      background: none; border: 1px solid var(--line); border-radius: 999px;
+      padding: 7px 10px; cursor: pointer;
+      font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase;
+      color: var(--paper-dim);
+    }
+    .tab[aria-selected="true"] { background: var(--yellow); color: var(--ink); border-color: var(--yellow); }
+
+    .view { flex: 1; overflow-y: auto; padding: 18px 20px 28px; min-height: 0; }
+    .view[hidden] { display: none; }
+
+    /* ---------- form ---------- */
+    label.field { display: block; margin-bottom: 14px; }
+    .lbl {
+      display: block;
+      font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase;
+      color: var(--paper-dim); margin-bottom: 6px;
+    }
+    .lbl em { font-style: normal; color: var(--magenta); }
+    input[type=text], input[type=url], input[type=search], textarea {
+      width: 100%;
+      background: var(--ink-soft);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 10px 12px;
+      outline: none;
+    }
+    input:focus, textarea:focus { border-color: var(--yellow); }
+    textarea { resize: vertical; min-height: 96px; }
+    .hint { color: var(--paper-dim); font-size: 12px; margin-top: 5px; }
+
+    .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .btn {
+      background: var(--ink-softer); border: 1px solid var(--line); border-radius: 8px;
+      padding: 9px 14px; cursor: pointer; font-weight: 600; font-size: 14px;
+      text-decoration: none; display: inline-flex; align-items: center; gap: 6px;
+      color: var(--paper);
+    }
+    .btn:hover { border-color: var(--paper-dim); }
+    .btn.primary { background: var(--yellow); color: var(--ink); border-color: var(--yellow); }
+    .btn.primary:hover { filter: brightness(1.05); }
+    .btn.ghost { background: none; }
+    .btn.small { padding: 6px 10px; font-size: 13px; }
+    .btn.danger { color: var(--magenta); }
+    .btn:disabled { opacity: .5; cursor: default; }
+
+    .divider {
+      display: flex; align-items: center; gap: 10px; margin: 18px 0 14px;
+      font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--paper-dim);
+    }
+    .divider::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+
+    .loc-status {
+      font-size: 13px; padding: 10px 12px; border-radius: 8px; margin: 10px 0 14px;
+      background: var(--ink-soft); border: 1px dashed var(--line); color: var(--paper-dim);
+    }
+    .loc-status.ok { border-style: solid; border-color: var(--green); color: var(--paper); }
+    .results { list-style: none; margin: 8px 0 4px; }
+    .results li button {
+      width: 100%; text-align: left; background: var(--ink-soft); border: 1px solid var(--line);
+      border-radius: 8px; padding: 8px 10px; margin-bottom: 6px; cursor: pointer; font-size: 13px;
+    }
+    .results li button:hover { border-color: var(--yellow); }
+    .results .src { font-family: var(--font-mono); font-size: 10px; color: var(--paper-dim); text-transform: uppercase; }
+
+    /* ---------- spot list ---------- */
+    .toolbar { display: flex; gap: 8px; margin-bottom: 10px; }
+    .toolbar input { flex: 1; }
+    .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
+    .chip {
+      background: none; border: 1px solid var(--line); border-radius: 999px;
+      padding: 3px 10px; cursor: pointer; font-size: 12px; color: var(--paper-dim);
+    }
+    .chip[aria-pressed="true"] { border-color: var(--magenta); color: var(--magenta); }
+    .count { font-family: var(--font-mono); font-size: 11px; color: var(--paper-dim); letter-spacing: .06em; text-transform: uppercase; margin-bottom: 8px; }
+
+    .spot {
+      border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; margin-bottom: 10px;
+      background: var(--ink-soft); cursor: pointer;
+    }
+    .spot:hover, .spot.active { border-color: var(--yellow); }
+    .spot h3 { font-size: 16px; font-weight: 600; display: flex; gap: 8px; align-items: center; }
+    .spot .addr { color: var(--paper-dim); font-size: 13px; margin-top: 2px; }
+    .spot .tags { margin-top: 6px; display: flex; flex-wrap: wrap; gap: 4px; }
+    .tag { font-family: var(--font-mono); font-size: 11px; color: var(--magenta); }
+    .badge {
+      font-family: var(--font-mono); font-size: 10px; letter-spacing: .06em; text-transform: uppercase;
+      padding: 1px 6px; border-radius: 4px; background: var(--green); color: var(--ink); font-weight: 500;
+    }
+    .badge.nopin { background: var(--magenta); }
+    .empty { color: var(--paper-dim); text-align: center; padding: 40px 10px; }
+
+    /* ---------- detail ---------- */
+    .detail h2 { font-family: var(--font-display); font-size: 30px; font-weight: 800; line-height: 1.05; text-transform: uppercase; }
+    .detail .addr { color: var(--paper-dim); margin: 6px 0 12px; }
+    .detail .notes { white-space: pre-wrap; background: var(--ink-soft); border-radius: 8px; padding: 10px 12px; margin: 12px 0; font-size: 14px; }
+    .detail .actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+    .embed-wrap { margin-top: 14px; }
+    .embed-wrap .instagram-media { min-width: 0 !important; width: 100% !important; }
+    .back { margin-bottom: 12px; }
+
+    /* ---------- export ---------- */
+    .steps { counter-reset: s; list-style: none; margin: 10px 0 18px; }
+    .steps li { counter-increment: s; position: relative; padding-left: 30px; margin-bottom: 8px; font-size: 14px; color: var(--paper-dim); }
+    .steps li::before {
+      content: counter(s); position: absolute; left: 0; top: 1px; width: 20px; height: 20px; border-radius: 50%;
+      background: var(--yellow); color: var(--ink); font-family: var(--font-mono); font-size: 11px; display: grid; place-items: center; font-weight: 500;
+    }
+    .steps b { color: var(--paper); font-weight: 600; }
+    .card { border: 1px solid var(--line); border-radius: 10px; padding: 14px; margin-bottom: 14px; }
+    .card h3 { font-size: 15px; margin-bottom: 4px; }
+    .card p { font-size: 13px; color: var(--paper-dim); margin-bottom: 10px; }
+
+    /* ---------- map ---------- */
+    #map { height: 100%; width: 100%; background: #0d1124; }
+    .map-wrap { position: relative; min-height: 0; }
+    .pick-banner {
+      position: absolute; top: 12px; left: 50%; transform: translateX(-50%); z-index: 500;
+      background: var(--magenta); color: var(--ink); font-weight: 600; font-size: 13px;
+      padding: 8px 14px; border-radius: 999px; box-shadow: 0 4px 18px rgba(0,0,0,.4);
+    }
+    .pin {
+      width: 26px; height: 26px; border-radius: 50% 50% 50% 0; transform: rotate(-45deg);
+      background: var(--yellow); border: 2px solid var(--ink); box-shadow: 0 2px 6px rgba(0,0,0,.5);
+    }
+    .pin.visited { background: var(--green); }
+    .pin.draft { background: var(--magenta); }
+    .leaflet-popup-content-wrapper, .leaflet-popup-tip { background: var(--ink-soft); color: var(--paper); }
+    .leaflet-popup-content { font-family: var(--font-body); margin: 10px 12px; }
+    .leaflet-popup-content b { font-size: 14px; }
+    .leaflet-popup-content a { color: var(--yellow); }
+    .leaflet-container a.leaflet-popup-close-button { color: var(--paper-dim); }
+    .leaflet-control-attribution { background: rgba(10,14,30,.75) !important; color: var(--paper-dim) !important; }
+    .leaflet-control-attribution a { color: var(--paper-dim) !important; }
+
+    .toast {
+      position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%) translateY(20px); opacity: 0;
+      background: var(--paper); color: var(--ink); padding: 10px 16px; border-radius: 8px; font-size: 14px; font-weight: 500;
+      transition: all .2s; z-index: 1000; pointer-events: none; max-width: calc(100vw - 32px);
+    }
+    .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+    @media (max-width: 760px) {
+      body { overflow: auto; }
+      .app { grid-template-columns: 1fr; grid-template-rows: 42vh auto; height: auto; min-height: 100dvh; }
+      .map-wrap { order: -1; position: sticky; top: 0; z-index: 10; height: 42vh; }
+      .panel { border-right: 0; }
+      .view { overflow: visible; padding: 16px 16px 40px; }
+      h1 { font-size: 28px; }
+    }
+  </style>
+</head>
+<body>
+<div class="app">
+  <aside class="panel">
+    <header class="top">
+      <div class="brand">
+        <h1>Makan <span>Map</span></h1>
+        <a class="home" href="/">← liangkaixin.com</a>
+      </div>
+      <p class="tagline">Instagram food finds → pins → Google Maps.</p>
+      <div class="tabs" role="tablist">
+        <button class="tab" role="tab" data-tab="add" aria-selected="true">+ Add</button>
+        <button class="tab" role="tab" data-tab="spots" aria-selected="false">Spots <span id="tabCount"></span></button>
+        <button class="tab" role="tab" data-tab="export" aria-selected="false">To Google</button>
+      </div>
+    </header>
+
+    <!-- ADD / EDIT -->
+    <section class="view" id="view-add">
+      <form id="addForm" autocomplete="off">
+        <label class="field">
+          <span class="lbl">Instagram post link</span>
+          <input type="url" id="f-ig" placeholder="https://www.instagram.com/p/…">
+        </label>
+        <label class="field">
+          <span class="lbl">Caption <em>(paste it — I'll pull out the place)</em></span>
+          <textarea id="f-caption" placeholder="Open the post → ⋯ → copy the caption text, or just paste the bit with 📍 / address"></textarea>
+          <div class="row" style="margin-top:8px">
+            <button type="button" class="btn small" id="btnParse">✨ Extract details</button>
+          </div>
+        </label>
+
+        <div class="divider">The spot</div>
+
+        <label class="field">
+          <span class="lbl">Name <em>*</em></span>
+          <input type="text" id="f-name" required placeholder="e.g. Tian Tian Hainanese Chicken Rice">
+        </label>
+        <label class="field">
+          <span class="lbl">Address or Google Maps link</span>
+          <input type="text" id="f-address" placeholder="1 Kadayanallur St, #01-10, Singapore 069184">
+        </label>
+
+        <div class="row">
+          <button type="button" class="btn" id="btnFind">🔎 Find on map</button>
+          <button type="button" class="btn ghost" id="btnPick">📍 Tap map to place</button>
+        </div>
+        <ul class="results" id="results"></ul>
+        <div class="loc-status" id="locStatus">No location yet — find it or tap the map.</div>
+
+        <label class="field">
+          <span class="lbl">Tags</span>
+          <input type="text" id="f-tags" placeholder="chickenrice, hawker, supper">
+          <div class="hint">Comma-separated. Hashtags from the caption get added automatically.</div>
+        </label>
+        <label class="field">
+          <span class="lbl">Notes</span>
+          <textarea id="f-notes" style="min-height:64px" placeholder="What to order, opening hours, who recommended it…"></textarea>
+        </label>
+        <label class="field row" style="gap:10px">
+          <input type="checkbox" id="f-visited"> <span>Already been here</span>
+        </label>
+
+        <div class="row" style="margin-top:6px">
+          <button type="submit" class="btn primary" id="btnSave">Save spot</button>
+          <button type="button" class="btn ghost" id="btnCancel" hidden>Cancel edit</button>
+        </div>
+      </form>
+    </section>
+
+    <!-- LIST / DETAIL -->
+    <section class="view" id="view-spots" hidden>
+      <div id="listPane">
+        <div class="toolbar">
+          <input type="search" id="q" placeholder="Search name, area, notes…">
+        </div>
+        <div class="chips" id="chips"></div>
+        <div class="count" id="count"></div>
+        <div id="list"></div>
+      </div>
+      <div id="detailPane" class="detail" hidden></div>
+    </section>
+
+    <!-- EXPORT -->
+    <section class="view" id="view-export" hidden>
+      <div class="card">
+        <h3>All spots → one Google map</h3>
+        <p>Google doesn't let other apps write to your saved lists, but it does let you import a file into <b>Google My Maps</b>. That map then shows up in the Google Maps app under <b>Saved → Maps</b>.</p>
+        <ol class="steps">
+          <li><b>Download KML</b> below.</li>
+          <li>Open <a href="https://www.google.com/maps/d/" target="_blank" rel="noopener">google.com/maps/d</a> → <b>Create a new map</b>.</li>
+          <li>On the layer, click <b>Import</b> and pick the file. Each pin carries the Instagram link and your notes.</li>
+          <li>On your phone: Google Maps → <b>You / Saved</b> → <b>Maps</b>.</li>
+        </ol>
+        <div class="row">
+          <button class="btn primary" id="btnKml">⬇ Download KML</button>
+          <button class="btn" id="btnCsv">⬇ CSV</button>
+        </div>
+        <p class="hint" style="margin-top:8px">Re-importing later? Delete the old layer in My Maps first so pins don't double up.</p>
+      </div>
+
+      <div class="card">
+        <h3>One spot at a time</h3>
+        <p>Each spot has an <b>Open in Google Maps</b> button. Tap it, then hit <b>Save</b> in Google Maps to drop it into any list (Want to go, Favourites…).</p>
+      </div>
+
+      <div class="card">
+        <h3>Backup &amp; move devices</h3>
+        <p>Spots are stored in this browser only. Back them up, or move them to your phone.</p>
+        <div class="row">
+          <button class="btn" id="btnBackup">⬇ Backup (JSON)</button>
+          <label class="btn" style="cursor:pointer">⬆ Restore<input type="file" id="fileRestore" accept=".json,application/json" hidden></label>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Share straight from Instagram</h3>
+        <p>Install this page as an app (Android Chrome: ⋮ → <b>Add to Home screen</b>) and it appears in Instagram's share sheet. On iPhone, use Share → Copy link, then paste it here.</p>
+      </div>
+    </section>
+  </aside>
+
+  <main class="map-wrap">
+    <div id="map"></div>
+    <div class="pick-banner" id="pickBanner" hidden>Tap the map where the place is</div>
+  </main>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+(() => {
+  'use strict';
+
+  const STORE_KEY = 'makanmap.spots.v1';
+  const SG = [1.3521, 103.8198];
+  const $ = (s) => document.querySelector(s);
+
+  /* ============================================================
+     STORAGE
+     ============================================================ */
+  let spots = load();
+  function load() {
+    try { return JSON.parse(localStorage.getItem(STORE_KEY)) || []; }
+    catch { return []; }
+  }
+  function persist() {
+    try { localStorage.setItem(STORE_KEY, JSON.stringify(spots)); }
+    catch { toast('Could not save — browser storage is blocked or full'); }
+  }
+  const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+
+  /* ============================================================
+     UTIL
+     ============================================================ */
+  const esc = (s = '') => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  let toastTimer;
+  function toast(msg) {
+    const t = $('#toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => t.classList.remove('show'), 2600);
+  }
+  function download(name, text, type) {
+    const blob = new Blob([text], { type });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  }
+  function cleanIgUrl(u) {
+    const m = String(u || '').match(/https?:\/\/(?:www\.)?instagram\.com\/(?:[\w.]+\/)?(p|reel|reels|tv)\/([\w-]+)/i);
+    if (!m) return (u || '').trim();
+    const kind = m[1].toLowerCase() === 'reels' ? 'reel' : m[1].toLowerCase();
+    return `https://www.instagram.com/${kind}/${m[2]}/`;
+  }
+  function gmapsUrl(s) {
+    const q = [s.name, s.address].filter(Boolean).join(', ');
+    if (q) return 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(q);
+    return `https://www.google.com/maps/search/?api=1&query=${s.lat},${s.lng}`;
+  }
+  // Pull coordinates out of a pasted Google Maps URL, if any
+  function coordsFromText(t) {
+    if (!t) return null;
+    let m = t.match(/!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)/) || t.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/) ||
+            t.match(/[?&](?:q|query|ll)=(-?\d+\.\d+),\s*(-?\d+\.\d+)/) || t.match(/^\s*(-?\d{1,2}\.\d{3,}),\s*(-?\d{1,3}\.\d{3,})\s*$/);
+    if (!m) return null;
+    const lat = parseFloat(m[1]), lng = parseFloat(m[2]);
+    return Math.abs(lat) <= 90 && Math.abs(lng) <= 180 ? { lat, lng } : null;
+  }
+
+  /* ============================================================
+     CAPTION PARSING — food-IG captions are messy but patterned
+     ============================================================ */
+  const EMOJI = /[\p{Extended_Pictographic}️‍]/gu;
+  function parseCaption(text) {
+    const out = { name: '', address: '', tags: [] };
+    if (!text) return out;
+    const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+
+    // hashtags must start with a letter, so unit numbers like #01-10 aren't picked up
+    out.tags = [...new Set([...text.matchAll(/(?:^|[^\w&])#(\p{L}[\p{L}\p{N}_]*)/gu)].map((m) => m[1].toLowerCase()))]
+      .filter((t) => !/^(food|foodie|foodporn|instafood|sgfood|sgfoodie|singapore|sg|yummy|delicious|eeeeeats|burpple|foodstagram|igsg|sgig|exploresingapore)$/.test(t))
+      .slice(0, 8);
+
+    // 1) Explicit pin markers: 📍, 🏠, "Address:", "Location:", "Where:"
+    const pinRe = /^(?:📍|📌|🏠|🏪|🗺️?|➡️)\s*|^(?:address|addr|location|loc|where|venue|find (?:it|them) at)\s*[:\-–]\s*/i;
+    const pinIdx = lines.findIndex((l) => pinRe.test(l) || l.includes('📍'));
+    if (pinIdx !== -1) {
+      let raw = lines[pinIdx].replace(/^.*?📍/, '').replace(pinRe, '').trim();
+      // address often spills onto the next line
+      const next = lines[pinIdx + 1];
+      if (next && !/^[#@]/.test(next) && /(\d{6}|#\d{1,3}-\d{1,4}|\b(road|rd|street|st|ave|avenue|drive|dr|lane|ln|blk|block|jalan|lorong|mall|centre|center|plaza)\b)/i.test(next) && !raw.match(/\d{6}/)) {
+        raw += ', ' + next.replace(EMOJI, '').trim();
+      }
+      raw = raw.replace(EMOJI, '').trim();
+      // "@handle / Name — address" or "Name, 123 Some Road"
+      const handle = raw.match(/@([\w.]+)/);
+      const split = raw.split(/\s+[–—|]\s+|\s+-\s+|:\s+/);
+      if (split.length > 1 && !/\d/.test(split[0])) {
+        out.name = split[0].replace(/@/g, '').trim();
+        out.address = split.slice(1).join(', ').trim();
+      } else {
+        const firstComma = raw.indexOf(',');
+        const head = firstComma > -1 ? raw.slice(0, firstComma) : raw;
+        if (firstComma > -1 && !/\d/.test(head) && looksLikeAddress(raw.slice(firstComma + 1))) {
+          out.name = head.replace(/@/g, '').trim();
+          out.address = raw.slice(firstComma + 1).trim();
+        } else if (looksLikeAddress(raw)) {
+          out.address = raw.replace(/@[\w.]+\s*/, '').trim();
+        } else {
+          out.name = raw.replace(/@/g, '').trim();
+        }
+      }
+      if (!out.name && handle) out.name = prettyHandle(handle[1]);
+    }
+
+    // 2) Any line with a Singapore postal code / unit number is a good address candidate
+    if (!out.address) {
+      const a = lines.find((l) => /\b\d{6}\b/.test(l) || /#\d{1,3}-\d{1,4}/.test(l));
+      if (a) out.address = a.replace(EMOJI, '').replace(/^(address|addr|location)\s*[:\-–]\s*/i, '').trim();
+    }
+
+    // 3) Name fallback: first @mention, else a short first line
+    if (!out.name) {
+      const h = text.match(/@([\w.]{3,})/);
+      if (h) out.name = prettyHandle(h[1]);
+      else {
+        const first = (lines[0] || '').replace(EMOJI, '').replace(/#[\w]+/g, '').trim();
+        if (pinIdx !== 0 && first && first.length <= 60 && !looksLikeAddress(first) && !/^(address|addr|location)\b/i.test(first)) out.name = first;
+      }
+    }
+    out.address = out.address.replace(/\s{2,}/g, ' ').replace(/^[,\s]+|[,\s]+$/g, '');
+    out.name = out.name.replace(/\s{2,}/g, ' ').replace(/^[,\s]+|[,\s]+$/g, '');
+    return out;
+  }
+  function looksLikeAddress(s) {
+    return /\d/.test(s) && /(\d{6}|#\d|\b(road|rd|street|st|ave|avenue|drive|dr|lane|ln|blk|block|jalan|lorong|crescent|cres|walk|way|place|pl|mall|centre|center|plaza|singapore)\b)/i.test(s);
+  }
+  function prettyHandle(h) {
+    return h.replace(/[._]+/g, ' ').replace(/\b(sg|official|singapore)\b/gi, '').trim().replace(/\b\w/g, (c) => c.toUpperCase());
+  }
+
+  /* ============================================================
+     GEOCODING — OneMap (great for SG) + OpenStreetMap Nominatim
+     ============================================================ */
+  async function oneMap(q) {
+    try {
+      const r = await fetch('https://www.onemap.gov.sg/api/common/elastic/search?returnGeom=Y&getAddrDetails=Y&pageNum=1&searchVal=' + encodeURIComponent(q));
+      if (!r.ok) return [];
+      const j = await r.json();
+      return (j.results || []).slice(0, 4).map((x) => ({
+        label: x.BUILDING && x.BUILDING !== 'NIL' ? `${x.BUILDING} — ${x.ADDRESS}` : x.ADDRESS,
+        address: x.ADDRESS, lat: +x.LATITUDE, lng: +x.LONGITUDE, src: 'OneMap',
+      }));
+    } catch { return []; }
+  }
+  async function nominatim(q) {
+    try {
+      const r = await fetch('https://nominatim.openstreetmap.org/search?format=jsonv2&limit=4&addressdetails=0&q=' + encodeURIComponent(q),
+        { headers: { 'Accept-Language': 'en' } });
+      if (!r.ok) return [];
+      return (await r.json()).map((x) => ({ label: x.display_name, address: x.display_name, lat: +x.lat, lng: +x.lon, src: 'OpenStreetMap' }));
+    } catch { return []; }
+  }
+  async function geocode(name, address) {
+    const queries = [];
+    const postal = (address.match(/\b\d{6}\b/) || [])[0];
+    if (postal) queries.push(postal);
+    if (address) queries.push(address);
+    if (name && address) queries.push(`${name} ${address}`);
+    if (name) queries.push(name);
+
+    const seen = new Set(), results = [];
+    for (const q of queries) {
+      const batch = (await Promise.all([oneMap(q), nominatim(q.match(/singapore/i) || /^\d{6}$/.test(q) ? q : q + ', Singapore')])).flat();
+      for (const r of batch) {
+        if (!isFinite(r.lat) || !isFinite(r.lng)) continue;
+        const k = r.lat.toFixed(4) + ',' + r.lng.toFixed(4);
+        if (!seen.has(k)) { seen.add(k); results.push(r); }
+      }
+      if (results.length >= 3) break;
+    }
+    return results.slice(0, 6);
+  }
+
+  /* ============================================================
+     MAP
+     ============================================================ */
+  const map = L.map('map', { zoomControl: true }).setView(SG, 12);
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    maxZoom: 20, subdomains: 'abcd',
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/">CARTO</a>',
+  }).addTo(map);
+  const pinIcon = (cls = '') => L.divIcon({ className: '', html: `<div class="pin ${cls}"></div>`, iconSize: [26, 26], iconAnchor: [13, 26], popupAnchor: [0, -24] });
+  const layer = L.layerGroup().addTo(map);
+  const markers = new Map();
+  let draftMarker = null;
+
+  function popupHtml(s) {
+    return `<b>${esc(s.name)}</b><br><span style="font-size:12px;opacity:.75">${esc(s.address || '')}</span><br>
+      <a href="#" data-open="${s.id}">Details</a> · <a href="${gmapsUrl(s)}" target="_blank" rel="noopener">Google Maps</a>
+      ${s.igUrl ? ` · <a href="${esc(s.igUrl)}" target="_blank" rel="noopener">Post</a>` : ''}`;
+  }
+  function drawMarkers(list) {
+    layer.clearLayers();
+    markers.clear();
+    list.filter((s) => s.lat != null).forEach((s) => {
+      const m = L.marker([s.lat, s.lng], { icon: pinIcon(s.visited ? 'visited' : ''), title: s.name }).bindPopup(popupHtml(s));
+      m.addTo(layer);
+      markers.set(s.id, m);
+    });
+  }
+  function fitAll(list) {
+    const pts = list.filter((s) => s.lat != null).map((s) => [s.lat, s.lng]);
+    if (pts.length === 1) map.setView(pts[0], 16);
+    else if (pts.length) map.fitBounds(pts, { padding: [40, 40], maxZoom: 16 });
+  }
+  map.on('popupopen', (e) => {
+    const a = e.popup.getElement().querySelector('[data-open]');
+    if (a) a.addEventListener('click', (ev) => { ev.preventDefault(); showDetail(a.dataset.open); });
+  });
+
+  /* ============================================================
+     ADD / EDIT FORM
+     ============================================================ */
+  let draft = { lat: null, lng: null };
+  let editingId = null;
+  let picking = false;
+
+  function setDraftLocation(lat, lng, label) {
+    draft.lat = lat; draft.lng = lng;
+    if (draftMarker) draftMarker.setLatLng([lat, lng]);
+    else {
+      draftMarker = L.marker([lat, lng], { icon: pinIcon('draft'), draggable: true, zIndexOffset: 1000 }).addTo(map);
+      draftMarker.on('dragend', () => {
+        const p = draftMarker.getLatLng();
+        setDraftLocation(p.lat, p.lng, 'Moved by hand');
+      });
+    }
+    map.setView([lat, lng], Math.max(map.getZoom(), 16));
+    const st = $('#locStatus');
+    st.classList.add('ok');
+    st.innerHTML = `✓ Pinned${label ? ' — ' + esc(label) : ''}<br><span style="font-size:12px;color:var(--paper-dim)">${lat.toFixed(5)}, ${lng.toFixed(5)} · drag the pink pin to adjust</span>`;
+  }
+  function clearDraftLocation() {
+    draft = { lat: null, lng: null };
+    if (draftMarker) { map.removeLayer(draftMarker); draftMarker = null; }
+    const st = $('#locStatus');
+    st.classList.remove('ok');
+    st.textContent = 'No location yet — find it or tap the map.';
+    $('#results').innerHTML = '';
+  }
+  function setPicking(on) {
+    picking = on;
+    $('#pickBanner').hidden = !on;
+    $('#btnPick').textContent = on ? '✕ Stop placing' : '📍 Tap map to place';
+    map.getContainer().style.cursor = on ? 'crosshair' : '';
+    if (on && window.matchMedia('(max-width: 760px)').matches) window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+  map.on('click', (e) => {
+    if (!picking) return;
+    setDraftLocation(e.latlng.lat, e.latlng.lng, 'Placed by hand');
+    setPicking(false);
+  });
+
+  function applyParsed() {
+    const p = parseCaption($('#f-caption').value);
+    let filled = [];
+    if (p.name && !$('#f-name').value.trim()) { $('#f-name').value = p.name; filled.push('name'); }
+    if (p.address && !$('#f-address').value.trim()) { $('#f-address').value = p.address; filled.push('address'); }
+    if (p.tags.length) {
+      const cur = splitTags($('#f-tags').value);
+      $('#f-tags').value = [...new Set([...cur, ...p.tags])].join(', ');
+      filled.push('tags');
+    }
+    return filled;
+  }
+  $('#btnParse').addEventListener('click', async () => {
+    const filled = applyParsed();
+    if (!filled.length) { toast('Couldn’t spot a place — type the name in'); return; }
+    toast('Filled ' + filled.join(', '));
+    if ((filled.includes('address') || filled.includes('name')) && draft.lat == null) findOnMap();
+  });
+  $('#f-caption').addEventListener('paste', () => setTimeout(() => { if (applyParsed().length && draft.lat == null) findOnMap(); }, 0));
+
+  async function findOnMap() {
+    const name = $('#f-name').value.trim(), address = $('#f-address').value.trim();
+    const c = coordsFromText(address);
+    if (c) { setDraftLocation(c.lat, c.lng, 'From Google Maps link'); return; }
+    if (/maps\.app\.goo\.gl|goo\.gl\/maps/.test(address)) {
+      toast('Short links can’t be read — open it and copy the full URL, or type the address');
+      return;
+    }
+    if (!name && !address) { toast('Add a name or address first'); return; }
+    const btn = $('#btnFind');
+    btn.disabled = true; btn.textContent = 'Searching…';
+    const res = await geocode(name, address);
+    btn.disabled = false; btn.textContent = '🔎 Find on map';
+    const ul = $('#results');
+    if (!res.length) {
+      ul.innerHTML = '';
+      toast('No match — try the street address, or tap the map');
+      return;
+    }
+    setDraftLocation(res[0].lat, res[0].lng, res[0].label.split(',')[0]);
+    ul.innerHTML = res.length > 1
+      ? `<li class="hint" style="margin-bottom:6px">Not the right one? Pick another:</li>` +
+        res.map((r, i) => `<li><button type="button" data-i="${i}"><span class="src">${r.src}</span><br>${esc(r.label)}</button></li>`).join('')
+      : '';
+    ul.querySelectorAll('button').forEach((b) => b.addEventListener('click', () => {
+      const r = res[+b.dataset.i];
+      setDraftLocation(r.lat, r.lng, r.label.split(',')[0]);
+    }));
+  }
+  $('#btnFind').addEventListener('click', findOnMap);
+  $('#btnPick').addEventListener('click', () => setPicking(!picking));
+
+  const splitTags = (s) => s.split(/[,#]/).map((t) => t.trim().toLowerCase()).filter(Boolean);
+
+  function resetForm() {
+    $('#addForm').reset();
+    editingId = null;
+    $('#btnSave').textContent = 'Save spot';
+    $('#btnCancel').hidden = true;
+    clearDraftLocation();
+    setPicking(false);
+  }
+  $('#btnCancel').addEventListener('click', () => { resetForm(); switchTab('spots'); });
+
+  $('#addForm').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const name = $('#f-name').value.trim();
+    if (!name) { toast('Give it a name'); $('#f-name').focus(); return; }
+    const data = {
+      igUrl: cleanIgUrl($('#f-ig').value),
+      caption: $('#f-caption').value.trim(),
+      name,
+      address: coordsFromText($('#f-address').value) ? '' : $('#f-address').value.trim(),
+      lat: draft.lat, lng: draft.lng,
+      tags: splitTags($('#f-tags').value),
+      notes: $('#f-notes').value.trim(),
+      visited: $('#f-visited').checked,
+    };
+    let id;
+    if (editingId) {
+      const s = spots.find((x) => x.id === editingId);
+      Object.assign(s, data, { updatedAt: Date.now() });
+      id = s.id;
+      toast('Updated ' + name);
+    } else {
+      id = uid();
+      spots.unshift({ id, createdAt: Date.now(), ...data });
+      toast(data.lat == null ? 'Saved — no pin yet, edit it to add one' : 'Saved ' + name);
+    }
+    persist();
+    resetForm();
+    render();
+    showDetail(id);
+  });
+
+  function startEdit(id) {
+    const s = spots.find((x) => x.id === id);
+    if (!s) return;
+    resetForm();
+    editingId = id;
+    $('#f-ig').value = s.igUrl || '';
+    $('#f-caption').value = s.caption || '';
+    $('#f-name').value = s.name;
+    $('#f-address').value = s.address || '';
+    $('#f-tags').value = (s.tags || []).join(', ');
+    $('#f-notes').value = s.notes || '';
+    $('#f-visited').checked = !!s.visited;
+    if (s.lat != null) setDraftLocation(s.lat, s.lng, 'Current pin');
+    $('#btnSave').textContent = 'Update spot';
+    $('#btnCancel').hidden = false;
+    switchTab('add');
+  }
+
+  /* ============================================================
+     LIST + DETAIL
+     ============================================================ */
+  let activeTag = null;
+  function filtered() {
+    const q = $('#q').value.trim().toLowerCase();
+    return spots.filter((s) => {
+      if (activeTag === '__todo' && s.visited) return false;
+      if (activeTag === '__been' && !s.visited) return false;
+      if (activeTag && !activeTag.startsWith('__') && !(s.tags || []).includes(activeTag)) return false;
+      if (!q) return true;
+      return [s.name, s.address, s.notes, (s.tags || []).join(' ')].join(' ').toLowerCase().includes(q);
+    });
+  }
+  function render() {
+    $('#tabCount').textContent = spots.length ? `(${spots.length})` : '';
+    const counts = {};
+    spots.forEach((s) => (s.tags || []).forEach((t) => (counts[t] = (counts[t] || 0) + 1)));
+    const top = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 14).map(([t]) => t);
+    const chip = (val, label) => `<button class="chip" data-tag="${esc(val)}" aria-pressed="${activeTag === val}">${esc(label)}</button>`;
+    $('#chips').innerHTML = spots.length ? chip('__todo', 'Want to go') + chip('__been', 'Been') + top.map((t) => chip(t, '#' + t)).join('') : '';
+    $('#chips').querySelectorAll('.chip').forEach((c) => c.addEventListener('click', () => {
+      activeTag = activeTag === c.dataset.tag ? null : c.dataset.tag;
+      render();
+    }));
+
+    const list = filtered();
+    $('#count').textContent = spots.length ? `${list.length} of ${spots.length} spots` : '';
+    $('#list').innerHTML = list.length ? list.map((s) => `
+      <div class="spot" data-id="${s.id}">
+        <h3>${esc(s.name)} ${s.visited ? '<span class="badge">Been</span>' : ''} ${s.lat == null ? '<span class="badge nopin">No pin</span>' : ''}</h3>
+        ${s.address ? `<div class="addr">${esc(s.address)}</div>` : ''}
+        ${(s.tags || []).length ? `<div class="tags">${s.tags.map((t) => `<span class="tag">#${esc(t)}</span>`).join('')}</div>` : ''}
+      </div>`).join('')
+      : `<div class="empty">${spots.length ? 'Nothing matches.' : 'No spots yet.<br>Paste an Instagram post in <b>+ Add</b> to start.'}</div>`;
+    $('#list').querySelectorAll('.spot').forEach((el) => el.addEventListener('click', () => showDetail(el.dataset.id)));
+    drawMarkers(list);
+  }
+  $('#q').addEventListener('input', render);
+
+  let igScriptLoaded = false;
+  function loadInstagramEmbeds() {
+    if (window.instgrm) { window.instgrm.Embeds.process(); return; }
+    if (igScriptLoaded) return;
+    igScriptLoaded = true;
+    const s = document.createElement('script');
+    s.async = true;
+    s.src = 'https://www.instagram.com/embed.js';
+    document.body.appendChild(s);
+  }
+
+  function showDetail(id) {
+    const s = spots.find((x) => x.id === id);
+    if (!s) return;
+    switchTab('spots');
+    $('#listPane').hidden = true;
+    const d = $('#detailPane');
+    d.hidden = false;
+    d.innerHTML = `
+      <button class="btn small ghost back" id="dBack">← All spots</button>
+      <h2>${esc(s.name)}</h2>
+      ${s.address ? `<div class="addr">${esc(s.address)}</div>` : ''}
+      ${(s.tags || []).length ? `<div class="tags" style="display:flex;gap:6px;flex-wrap:wrap">${s.tags.map((t) => `<span class="tag">#${esc(t)}</span>`).join('')}</div>` : ''}
+      <div class="actions">
+        <a class="btn primary" href="${gmapsUrl(s)}" target="_blank" rel="noopener">Open in Google Maps ↗</a>
+        ${s.lat != null ? `<a class="btn" href="https://www.google.com/maps/dir/?api=1&destination=${s.lat},${s.lng}" target="_blank" rel="noopener">Directions</a>` : ''}
+      </div>
+      <div class="actions">
+        <button class="btn small" id="dVisited">${s.visited ? '↺ Mark not been' : '✓ Mark as been'}</button>
+        <button class="btn small" id="dEdit">Edit</button>
+        <button class="btn small danger" id="dDel">Delete</button>
+      </div>
+      ${s.notes ? `<div class="notes">${esc(s.notes)}</div>` : ''}
+      ${s.igUrl && /instagram\.com\/(p|reel|tv)\//.test(s.igUrl) ? `
+        <div class="embed-wrap">
+          <blockquote class="instagram-media" data-instgrm-permalink="${esc(s.igUrl)}?utm_source=ig_embed" data-instgrm-version="14"
+            style="background:#fff;border:0;border-radius:10px;margin:0;padding:0;width:100%">
+            <a href="${esc(s.igUrl)}" target="_blank" rel="noopener" style="display:block;padding:16px;color:#0A0E1E">View the Instagram post ↗</a>
+          </blockquote>
+        </div>` : s.igUrl ? `<p><a href="${esc(s.igUrl)}" target="_blank" rel="noopener">Source post ↗</a></p>` : ''}
+    `;
+    $('#dBack').addEventListener('click', hideDetail);
+    $('#dEdit').addEventListener('click', () => startEdit(id));
+    $('#dVisited').addEventListener('click', () => { s.visited = !s.visited; persist(); render(); showDetail(id); });
+    $('#dDel').addEventListener('click', () => {
+      if (!confirm(`Delete ${s.name}?`)) return;
+      spots = spots.filter((x) => x.id !== id);
+      persist(); hideDetail(); render(); toast('Deleted');
+    });
+    document.querySelectorAll('.spot').forEach((el) => el.classList.toggle('active', el.dataset.id === id));
+    const m = markers.get(id);
+    if (m) { map.setView(m.getLatLng(), Math.max(map.getZoom(), 16)); m.openPopup(); }
+    if (s.igUrl) loadInstagramEmbeds();
+    d.parentElement.scrollTop = 0;
+  }
+  function hideDetail() {
+    $('#detailPane').hidden = true;
+    $('#detailPane').innerHTML = '';
+    $('#listPane').hidden = false;
+    map.closePopup();
+  }
+
+  /* ============================================================
+     TABS
+     ============================================================ */
+  function switchTab(name) {
+    document.querySelectorAll('.tab').forEach((t) => t.setAttribute('aria-selected', t.dataset.tab === name));
+    ['add', 'spots', 'export'].forEach((v) => ($('#view-' + v).hidden = v !== name));
+    if (name !== 'add') setPicking(false);
+  }
+  document.querySelectorAll('.tab').forEach((t) => t.addEventListener('click', () => {
+    if (t.dataset.tab === 'spots') hideDetail();
+    switchTab(t.dataset.tab);
+  }));
+
+  /* ============================================================
+     EXPORT / IMPORT
+     ============================================================ */
+  const xml = (s = '') => String(s).replace(/[<>&'"]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', "'": '&apos;', '"': '&quot;' }[c]));
+  function toKml() {
+    const pinned = spots.filter((s) => s.lat != null);
+    const style = (id, color) => `<Style id="${id}"><IconStyle><color>${color}</color><Icon><href>https://maps.google.com/mapfiles/kml/paddle/wht-blank.png</href></Icon></IconStyle></Style>`;
+    const placemarks = pinned.map((s) => {
+      const desc = [
+        s.address,
+        s.notes,
+        (s.tags || []).length ? s.tags.map((t) => '#' + t).join(' ') : '',
+        s.visited ? '✓ Been' : 'Want to go',
+        s.igUrl ? `Instagram: ${s.igUrl}` : '',
+      ].filter(Boolean).join('\n');
+      return `    <Placemark>
+      <name>${xml(s.name)}</name>
+      <description>${xml(desc)}</description>
+      <styleUrl>#${s.visited ? 'been' : 'todo'}</styleUrl>
+      <ExtendedData>
+        <Data name="Address"><value>${xml(s.address)}</value></Data>
+        <Data name="Instagram"><value>${xml(s.igUrl)}</value></Data>
+        <Data name="Tags"><value>${xml((s.tags || []).join(', '))}</value></Data>
+        <Data name="Notes"><value>${xml(s.notes)}</value></Data>
+      </ExtendedData>
+      <Point><coordinates>${s.lng},${s.lat},0</coordinates></Point>
+    </Placemark>`;
+    }).join('\n');
+    return `<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2">
+  <Document>
+    <name>Makan Map</name>
+    ${style('todo', 'ff4dd8ff')}
+    ${style('been', 'ffa4e35b')}
+${placemarks}
+  </Document>
+</kml>`;
+  }
+  function toCsv() {
+    const cell = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+    const head = ['Name', 'Address', 'Latitude', 'Longitude', 'Instagram', 'Tags', 'Notes', 'Visited'];
+    const rows = spots.map((s) => [s.name, s.address, s.lat ?? '', s.lng ?? '', s.igUrl, (s.tags || []).join(', '), s.notes, s.visited ? 'yes' : 'no'].map(cell).join(','));
+    return '﻿' + [head.join(','), ...rows].join('\r\n');
+  }
+  const stamp = () => new Date().toISOString().slice(0, 10);
+  $('#btnKml').addEventListener('click', () => {
+    const n = spots.filter((s) => s.lat != null).length;
+    if (!n) { toast('No pinned spots to export yet'); return; }
+    download(`makan-map-${stamp()}.kml`, toKml(), 'application/vnd.google-earth.kml+xml');
+    const skipped = spots.length - n;
+    toast(`Exported ${n} spots` + (skipped ? ` (${skipped} without a pin skipped)` : ''));
+  });
+  $('#btnCsv').addEventListener('click', () => {
+    if (!spots.length) { toast('Nothing to export yet'); return; }
+    download(`makan-map-${stamp()}.csv`, toCsv(), 'text/csv');
+  });
+  $('#btnBackup').addEventListener('click', () => download(`makan-map-backup-${stamp()}.json`, JSON.stringify({ version: 1, spots }, null, 2), 'application/json'));
+  $('#fileRestore').addEventListener('change', async (e) => {
+    const f = e.target.files[0];
+    e.target.value = '';
+    if (!f) return;
+    try {
+      const j = JSON.parse(await f.text());
+      const incoming = (Array.isArray(j) ? j : j.spots || []).filter((s) => s && s.name);
+      const ids = new Set(spots.map((s) => s.id));
+      let added = 0;
+      incoming.forEach((s) => { if (!s.id || !ids.has(s.id)) { spots.push({ ...s, id: s.id || uid() }); added++; } });
+      persist(); render(); fitAll(spots);
+      toast(`Restored ${added} new spot${added === 1 ? '' : 's'}`);
+    } catch { toast('That file isn’t a Makan Map backup'); }
+  });
+
+  /* ============================================================
+     SHARE TARGET / DEEP LINK — ?url=…&text=…
+     ============================================================ */
+  function handleIncomingShare() {
+    const p = new URLSearchParams(location.search);
+    const blob = [p.get('url'), p.get('text'), p.get('title')].filter(Boolean).join('\n');
+    if (!blob) return false;
+    const ig = blob.match(/https?:\/\/(?:www\.)?instagram\.com\/\S+/i);
+    if (ig) $('#f-ig').value = cleanIgUrl(ig[0]);
+    const rest = blob.replace(/https?:\/\/\S+/g, '').trim();
+    if (rest) { $('#f-caption').value = rest; applyParsed(); }
+    history.replaceState(null, '', location.pathname);
+    toast(ig ? 'Got the post — now paste its caption' : 'Got it');
+    setTimeout(() => $(ig && !rest ? '#f-caption' : '#f-name').focus(), 300);
+    return true;
+  }
+  $('#f-ig').addEventListener('paste', () => setTimeout(() => ($('#f-ig').value = cleanIgUrl($('#f-ig').value)), 0));
+
+  /* ============================================================
+     BOOT
+     ============================================================ */
+  render();
+  fitAll(spots);
+  if (!handleIncomingShare() && spots.length) switchTab('spots');
+  if ('serviceWorker' in navigator && location.protocol === 'https:') {
+    navigator.serviceWorker.register('sw.js').catch(() => {});
+  }
+
+  // exposed for quick testing in the console
+  window.__makan = { parseCaption, coordsFromText, toKml, toCsv };
+})();
+</script>
+</body>
+</html>
