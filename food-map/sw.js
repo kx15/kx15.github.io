@@ -1,6 +1,6 @@
 // Minimal service worker: makes the page installable (so it can appear in
 // Android's share sheet) and keeps the app shell available offline.
-const CACHE = 'makanmap-v1';
+const CACHE = 'makanmap-v2';
 const SHELL = ['./', './index.html', './manifest.webmanifest', './icon.svg', './icon-192.png'];
 
 self.addEventListener('install', (e) => {

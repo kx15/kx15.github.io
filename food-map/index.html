@@ -233,6 +233,7 @@
     #map { height: 100%; width: 100%; background: var(--ink); }
     /* tint the dark basemap toward the site's ink-navy */
     .leaflet-tile-pane { filter: sepia(1) hue-rotate(190deg) saturate(1.5) brightness(0.75) contrast(1.05); }
+    .osm-fallback .leaflet-tile-pane { filter: grayscale(1) invert(1) sepia(1) hue-rotate(190deg) saturate(1.5) brightness(0.7) contrast(1.15); }
     .pick-banner {
       position: absolute; top: 14px; left: 50%; transform: translateX(-50%); z-index: 500;
       background: var(--magenta); color: var(--ink);
@@ -305,9 +306,10 @@
         <label class="field">
           <span class="lbl">Instagram post link</span>
           <input type="url" id="f-ig" placeholder="https://www.instagram.com/p/…">
+          <div class="hint" id="igStatus">Paste a link — I'll read the post and find the place.</div>
         </label>
         <label class="field">
-          <span class="lbl">Caption <em>(paste it — I'll pull out the place)</em></span>
+          <span class="lbl">Caption <em>(filled in from the link — or paste it)</em></span>
           <textarea id="f-caption" placeholder="Open the post → ⋯ → copy the caption text, or just paste the bit with 📍 / address"></textarea>
           <div class="row" style="margin-top:8px">
             <button type="button" class="btn small" id="btnParse">✨ Extract details</button>
@@ -522,6 +524,7 @@
         }
       }
       if (!out.name && handle) out.name = prettyHandle(handle[1]);
+      if (out.name) out.nameFromPin = true;
     }
 
     // 2) Any line with a Singapore postal code / unit number is a good address candidate
@@ -597,10 +600,31 @@
      MAP
      ============================================================ */
   const map = L.map('map', { zoomControl: true }).setView(SG, 12);
-  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-    maxZoom: 20, subdomains: 'abcd',
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/">CARTO</a>',
-  }).addTo(map);
+  // Basemap: Esri's keyless Dark Gray Canvas (tinted navy in CSS). If its tiles
+  // fail to load, fall back to OpenStreetMap, inverted to dark in CSS.
+  const esri = (name) => `https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/${name}/MapServer/tile/{z}/{y}/{x}`;
+  const baseLayers = [
+    L.layerGroup([
+      L.tileLayer(esri('World_Dark_Gray_Base'), { maxZoom: 19, maxNativeZoom: 16, attribution: 'Tiles &copy; Esri &mdash; Esri, HERE, Garmin, &copy; OpenStreetMap contributors' }),
+      L.tileLayer(esri('World_Dark_Gray_Reference'), { maxZoom: 19, maxNativeZoom: 16 }),
+    ]),
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+    }),
+  ];
+  map.setMaxZoom(19);
+  let tileOk = false, tileErrors = 0;
+  baseLayers[0].eachLayer((l) => {
+    l.on('tileload', () => { tileOk = true; });
+    l.on('tileerror', () => {
+      if (tileOk || ++tileErrors < 4) return;
+      map.removeLayer(baseLayers[0]);
+      baseLayers[1].addTo(map);
+      map.getContainer().classList.add('osm-fallback');
+      tileOk = true; // only switch once
+    });
+  });
+  baseLayers[0].addTo(map);
   const pinIcon = (cls = '') => L.divIcon({ className: '', html: `<div class="pin ${cls}"></div>`, iconSize: [26, 26], iconAnchor: [13, 26], popupAnchor: [0, -24] });
   const layer = L.layerGroup().addTo(map);
   const markers = new Map();
@@ -673,8 +697,10 @@
     setPicking(false);
   });
 
-  function applyParsed() {
+  function applyParsed(taggedLocation = '') {
     const p = parseCaption($('#f-caption').value);
+    // the post's location tag beats a guessed name, but not an explicit 📍 line
+    if (taggedLocation && !p.nameFromPin && !/^(singapore|sg)$/i.test(taggedLocation.trim())) p.name = taggedLocation;
     let filled = [];
     if (p.name && !$('#f-name').value.trim()) { $('#f-name').value = p.name; filled.push('name'); }
     if (p.address && !$('#f-address').value.trim()) { $('#f-address').value = p.address; filled.push('address'); }
@@ -730,6 +756,8 @@
   function resetForm() {
     $('#addForm').reset();
     editingId = null;
+    lastFetched = '';
+    igStatus('Paste a link — I\'ll read the post and find the place.');
     $('#btnSave').textContent = 'Save spot';
     $('#btnCancel').hidden = true;
     clearDraftLocation();
@@ -985,11 +1013,49 @@ ${placemarks}
     const rest = blob.replace(/https?:\/\/\S+/g, '').trim();
     if (rest) { $('#f-caption').value = rest; applyParsed(); }
     history.replaceState(null, '', location.pathname);
-    toast(ig ? 'Got the post — now paste its caption' : 'Got it');
-    setTimeout(() => $(ig && !rest ? '#f-caption' : '#f-name').focus(), 300);
+    if (ig) readPost();
     return true;
   }
-  $('#f-ig').addEventListener('paste', () => setTimeout(() => ($('#f-ig').value = cleanIgUrl($('#f-ig').value)), 0));
+  /* ============================================================
+     READ THE POST — a small Vercel function fetches the caption,
+     since Instagram blocks browsers on other sites from reading it
+     ============================================================ */
+  const IG_API = 'https://makan-map-api.vercel.app/api/ig';
+  const IG_POST = /instagram\.com\/(?:[\w.]+\/)?(?:p|reels?|tv)\/[\w-]+/i;
+  let lastFetched = '';
+  function igStatus(msg, tone = '') {
+    const el = $('#igStatus');
+    el.textContent = msg;
+    el.style.color = tone === 'ok' ? 'var(--yellow)' : tone === 'bad' ? 'var(--magenta)' : '';
+  }
+  async function readPost() {
+    const url = cleanIgUrl($('#f-ig').value);
+    $('#f-ig').value = url;
+    if (!IG_POST.test(url)) { if (url) igStatus('That doesn’t look like an Instagram post link', 'bad'); return; }
+    if (url === lastFetched) return;
+    lastFetched = url;
+    igStatus('Reading the post…');
+    try {
+      const r = await fetch(IG_API + '?url=' + encodeURIComponent(url));
+      const j = await r.json();
+      if (url !== cleanIgUrl($('#f-ig').value)) return; // link changed meanwhile
+      if (!r.ok) throw new Error(j.error);
+      if (j.caption && !$('#f-caption').value.trim()) $('#f-caption').value = j.caption;
+      const filled = applyParsed(j.location || '');
+      const who = j.username ? ` from @${j.username}` : '';
+      if (filled.includes('name') || filled.includes('address')) {
+        igStatus(`✓ Read the post${who}${j.location ? ' · tagged ' + j.location : ''}`, 'ok');
+        if (draft.lat == null) findOnMap();
+      } else {
+        igStatus(`Read the post${who}, but couldn’t spot a place — type the name below`, 'bad');
+      }
+    } catch {
+      lastFetched = '';
+      igStatus('Couldn’t read this post (private, or Instagram said no). Paste the caption below instead.', 'bad');
+    }
+  }
+  $('#f-ig').addEventListener('paste', () => setTimeout(readPost, 0));
+  $('#f-ig').addEventListener('change', readPost);
 
   /* ============================================================
      BOOT
