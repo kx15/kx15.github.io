@@ -211,22 +211,51 @@
   // A tiny standalone preview of one item for shop cards.
   function itemIcon(id, size = 64) {
     return `<svg viewBox="-34 -56 68 68" width="${size}" height="${size}" aria-hidden="true">` +
-      `<polygon points="0,-12 30,3 0,18 -30,3" fill="#DCEFC9" transform="translate(0,-4) scale(.85)"/>${itemSVG(id)}</svg>`;
+      `<polygon points="0,-12 30,3 0,18 -30,3" fill="#E4EFD6" transform="translate(0,-4) scale(.85)"/>${itemSVG(id)}</svg>`;
+  }
+
+  let svgSeq = 0;
+  const cloud = (x, y, k, cls) => `<g class="cloud ${cls}" transform="translate(${x} ${y}) scale(${k})"><ellipse cx="0" cy="0" rx="22" ry="11" fill="#fff"/><ellipse cx="-16" cy="5" rx="14" ry="8" fill="#fff"/><ellipse cx="16" cy="5" rx="15" ry="8" fill="#fff"/><ellipse cx="0" cy="8" rx="28" ry="6" fill="#EEF5F4"/></g>`;
+  function hill(x, base, w, h, c1, c2, snow) {
+    return poly([[x - w, base], [x, base - h], [x, base]], c1) + poly([[x, base - h], [x + w, base], [x, base]], c2) +
+      (snow ? poly([[x - w * 0.28, base - h * 0.72], [x, base - h], [x + w * 0.28, base - h * 0.72], [x + w * 0.1, base - h * 0.78], [x, base - h * 0.7], [x - w * 0.12, base - h * 0.78]], '#fff') : '');
   }
 
   // The full village. `placed` = [{id, item_id, x, y}], `sel` = selected placed id.
-  function villageSVG({ size, placed, sel = null, placing = false, interactive = true }) {
-    const minX = -size * TW / 2 - 6, maxX = size * TW / 2 + 6;
-    const minY = -90, maxY = size * TH + 10;
+  // `scenery` floats the island in a little sea with hills and clouds behind it.
+  function villageSVG({ size, placed, sel = null, placing = false, interactive = true, scenery = false }) {
+    const id = 'v' + (++svgSeq);
+    const padX = scenery ? 40 : 6;
+    const minX = -size * TW / 2 - padX, maxX = size * TW / 2 + padX;
+    const minY = scenery ? -120 : -90, maxY = size * TH + (scenery ? 46 : 10);
+    const W = maxX - minX, H = maxY - minY;
     let tiles = '';
     for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
       const [sx, sy] = tileToScreen(x, y);
-      const fill = (x + y) % 2 ? '#D4EBC2' : '#DCEFC9';
-      tiles += `<polygon class="tile${placing ? ' placing' : ''}" data-x="${x}" data-y="${y}" points="${pts([[sx, sy], [sx + TW / 2, sy + TH / 2], [sx, sy + TH], [sx - TW / 2, sy + TH / 2]])}" fill="${fill}" stroke="#C3DFAE" stroke-width="1"/>`;
+      const fill = (x + y) % 2 ? '#BCD69F' : '#C8DEAC';
+      tiles += `<polygon class="tile${placing ? ' placing' : ''}" data-x="${x}" data-y="${y}" points="${pts([[sx, sy], [sx + TW / 2, sy + TH / 2], [sx, sy + TH], [sx - TW / 2, sy + TH / 2]])}" fill="${fill}" stroke="#AFCB90" stroke-width="1"/>`;
     }
-    // soft island edge
     const [lx, ly] = tileToScreen(0, size), [rx, ry] = tileToScreen(size, 0), [bx, by] = tileToScreen(size, size);
-    const edge = poly([[lx, ly], [bx, by], [bx, by + 10], [lx, ly + 10]], '#C9A98A') + poly([[bx, by], [rx, ry], [rx, ry + 10], [bx, by + 10]], '#B8977A');
+    const edge = poly([[lx, ly], [bx, by], [bx, by + 12], [lx, ly + 12]], '#C9A27E') + poly([[bx, by], [rx, ry], [rx, ry + 12], [bx, by + 12]], '#B48C6A');
+
+    let back = '';
+    if (scenery) {
+      const midY = size * TH / 2;
+      const sand = 18;
+      back =
+        `<rect x="${minX}" y="${minY}" width="${W}" height="${H}" fill="url(#${id}sky)"/>` +
+        hill(minX + W * 0.78, midY - size * 6, 70, 92, '#B7AEB4', '#9E949C', true) +
+        hill(minX + W * 0.92, midY - size * 4, 56, 66, '#A79EA6', '#8F8590', true) +
+        hill(minX + W * 0.2, midY - size * 5, 80, 54, '#9DBE8E', '#87AA79', false) +
+        cloud(minX + 46, minY + 30, 0.9, 'drift') + cloud(maxX - 60, minY + 22, 0.7, 'drift slow') +
+        `<rect x="${minX}" y="${midY - 6}" width="${W}" height="${maxY - midY + 6}" fill="url(#${id}sea)"/>` +
+        `<path d="M${minX} ${midY - 6} Q ${minX + W / 4} ${midY - 16} ${minX + W / 2} ${midY - 8} T ${maxX} ${midY - 10} V ${midY + 2} H ${minX} Z" fill="#9FC6CB"/>` +
+        poly([[0, -sand], [rx + sand * 1.6, ry + 6], [0, by + sand + 10], [lx - sand * 1.6, ly + 6]], '#EAD9B6') +
+        `<g class="waves" fill="none" stroke="#fff" stroke-opacity=".7" stroke-width="2" stroke-linecap="round">` +
+        `<path d="M${minX + 20} ${maxY - 22} q8 -5 16 0 t16 0"/><path d="M${maxX - 70} ${maxY - 14} q8 -5 16 0 t16 0"/><path d="M${maxX - 40} ${midY + 30} q8 -5 16 0 t16 0"/></g>`;
+    } else {
+      back = `<rect x="${minX}" y="${minY}" width="${W}" height="${H}" fill="url(#${id}sun)"/>`;
+    }
 
     const items = placed.filter((p) => p.x != null && p.x < size && p.y < size)
       .sort((p, q) => (p.x + p.y) - (q.x + q.y) || p.x - q.x)
@@ -236,10 +265,11 @@
         return `<g class="${cls}" data-placed="${p.id}" transform="translate(${sx} ${sy + TH / 2}) scale(1.3)">${p.id === sel ? `<ellipse cx="0" cy="0" rx="30" ry="14" fill="none" stroke="#fff" stroke-width="2.5" stroke-dasharray="5 4" class="sel-ring"/>` : ''}${itemSVG(p.item_id)}</g>`;
       }).join('');
 
-    return `<svg class="village${interactive ? ' interactive' : ''}" viewBox="${minX} ${minY} ${maxX - minX} ${maxY - minY}" role="img" aria-label="Your group's village">` +
-      `<defs><radialGradient id="sun" cx="50%" cy="0%" r="80%"><stop offset="0" stop-color="#FFF3D6"/><stop offset="1" stop-color="#FFF3D6" stop-opacity="0"/></radialGradient></defs>` +
-      `<rect x="${minX}" y="${minY}" width="${maxX - minX}" height="${maxY - minY}" fill="url(#sun)"/>` +
-      edge + tiles + items + `</svg>`;
+    return `<svg class="village${interactive ? ' interactive' : ''}" viewBox="${minX} ${minY} ${W} ${H}" role="img" aria-label="Your group's village">` +
+      `<defs><radialGradient id="${id}sun" cx="50%" cy="0%" r="80%"><stop offset="0" stop-color="#FFF3D6"/><stop offset="1" stop-color="#FFF3D6" stop-opacity="0"/></radialGradient>` +
+      `<linearGradient id="${id}sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#7E9FA6"/><stop offset=".6" stop-color="#A9C6C6"/></linearGradient>` +
+      `<linearGradient id="${id}sea" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#9CC5CA"/><stop offset="1" stop-color="#7FB0B8"/></linearGradient></defs>` +
+      back + edge + tiles + items + `</svg>`;
   }
 
   window.EFArt = { VILLAGE_ITEMS, LEVELS, villageSVG, itemIcon };

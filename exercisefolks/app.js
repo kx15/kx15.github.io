@@ -37,7 +37,7 @@
     { label: 'Lunchtime brisk walk', activity: 'walk', minutes: 15, intensity: 2 },
     { label: 'Desk stretch break', activity: 'home', minutes: 5, intensity: 1 },
   ];
-  const COLORS = ['#F4A6B7', '#A9D3A0', '#BFDDF2', '#CDB8EE', '#FFC6A8', '#FFE39A'];
+  const COLORS = ['#E9CCC4', '#B9CDB1', '#BFD3DA', '#D3C5DF', '#F2D3A8', '#E2CFC3'];
 
   // ------------------------------------------------------------------
   // Store
@@ -464,15 +464,22 @@
     const u = me();
     const offset = S.offsetMs !== 0;
     const main = { home: viewHome, plan: viewPlan, village: viewVillage, rewards: viewRewards, me: viewMe, admin: viewAdmin }[ui.tab] || viewHome;
+    const pending = S.session_participants.filter((p) => p.user_id === S.currentUserId && p.status === 'invited').length;
+    const title = { home: 'Dashboard', plan: 'Schedule', village: 'Adventure', rewards: 'Collections', me: 'Profile', admin: 'Admin' }[ui.tab] || 'Dashboard';
     $app.innerHTML = `
       <header class="topbar">
-        <div class="logo"><svg viewBox="0 0 32 32" width="26" height="26" aria-hidden="true"><use href="#logo"/></svg><span>ExerciseFolks</span></div>
+        <button class="tb-btn" data-act="tab" data-tab="home" aria-label="ExerciseFolks home"><svg viewBox="0 0 32 32" width="30" height="30" aria-hidden="true"><use href="#logo"/></svg></button>
+        <h1 class="tb-title">${title}</h1>
         <div class="top-right">
-          ${offset ? `<button class="clock-chip" data-act="tab" data-tab="admin" title="Simulated time (admin)">🕰 ${esc(fmtDay(now()))} ${esc(fmtTime(now()))}</button>` : ''}
-          <button class="who" data-act="switcher" aria-label="Switch test user">${avatar(u, 34)}</button>
+          <button class="tb-btn bell" data-act="plan" data-plan="sessions" aria-label="Invites${pending ? `: ${pending} waiting` : ''}"><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15zM10 20a2 2 0 0 0 4 0" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>${pending ? '<i></i>' : ''}</button>
+          <button class="who" data-act="switcher" aria-label="Switch test user">${avatar(u, 32)}</button>
         </div>
       </header>
-      <main class="view view-${ui.tab}">${main()}</main>
+      <main class="view view-${ui.tab}">
+        ${offset ? `<button class="clock-chip" data-act="tab" data-tab="admin" title="Simulated time (admin)">🕰 Test clock: ${esc(fmtDay(now()))} ${esc(fmtTime(now()))}</button>` : ''}
+        ${main()}
+      </main>
+      ${ui.tab === 'home' ? `<div class="cta-dock"><button class="btn teal big" data-act="plan" data-plan="find">Schedule a Workout</button></div>` : ''}
       ${ui.tab === 'admin' ? '' : tabbar()}
       <div id="toast" class="toast" role="status" aria-live="polite"></div>`;
     renderToast();
@@ -497,7 +504,7 @@
       body = `
         <div class="hero-village">${villageSVG({ size: 4, placed: [
           { id: 'a', item_id: 'cottage', x: 1, y: 1 }, { id: 'b', item_id: 'tree', x: 0, y: 2 }, { id: 'c', item_id: 'lantern', x: 2, y: 0 },
-          { id: 'd', item_id: 'flowers', x: 2, y: 2 }, { id: 'e', item_id: 'cat', x: 3, y: 2 }, { id: 'f', item_id: 'pond', x: 1, y: 3 }], interactive: false })}</div>
+          { id: 'd', item_id: 'flowers', x: 2, y: 2 }, { id: 'e', item_id: 'cat', x: 3, y: 2 }, { id: 'f', item_id: 'pond', x: 1, y: 3 }], interactive: false, scenery: true })}</div>
         <h1 class="display">Move with<br>your people.</h1>
         <p class="lede">ExerciseFolks finds the hours you and your friends are all free, nudges you to move together, and grows a cosy village with every workout.</p>
         ${joinable ? `<p class="note">You've been invited to <b>${esc(joinable.name)}</b>.</p>` : ''}
@@ -568,66 +575,109 @@
     return mySessions(userId, (s, p) => !s.closed && p.status === 'accepted' && !p.checked_in_at)[0]
       || mySessions(userId, (s, p) => !s.closed && p.status === 'accepted')[0];
   }
-  function sessionCard(s, opts = {}) {
+  function sessionAction(s) {
     const u = me(), p = part(s.id, u.id), t = nowMs(), a = sessionStart(s).getTime(), w = checkinWindow(s);
-    let action = '';
     if (p?.status === 'invited' && t < a) {
-      action = `<div class="row"><button class="btn primary" data-act="respond" data-id="${s.id}" data-yes="1">I'm in</button><button class="btn ghost" data-act="respond" data-id="${s.id}" data-yes="0">Can't make it</button></div>`;
-    } else if (p?.status === 'accepted' && !p.checked_in_at && !s.closed) {
-      if (canCheckIn(s, u.id)) action = `<button class="btn primary big" data-act="checkin" data-id="${s.id}">Check in &amp; log workout</button><p class="fine">Check in by ${fmtTime(new Date(w.closes))} to keep the 2x buddy bonus.</p>`;
-      else if (t < w.opens) action = `<div class="row between"><p class="fine">Check-in opens ${fmtTime(new Date(w.opens))}, ${fmtDur(w.opens - t)} from now.</p><button class="btn ghost sm" data-act="respond" data-id="${s.id}" data-yes="0">Can't make it</button></div>`;
-    } else if (p?.checked_in_at) {
-      const waiting = parts(s.id).filter((x) => x.status === 'accepted' && !x.checked_in_at);
-      action = s.bonus_awarded ? `<p class="good">2x buddy bonus earned 🎉</p>` : waiting.length && !s.closed ? `<p class="fine">You're checked in. 2x bonus unlocks when ${joinList(waiting.map((x) => youOr(x.user_id)))} check${waiting.length > 1 ? '' : 's'} in.</p>` : '';
+      return `<div class="row"><button class="btn primary" data-act="respond" data-id="${s.id}" data-yes="1">I'm in</button><button class="btn ghost" data-act="respond" data-id="${s.id}" data-yes="0">Can't make it</button></div>`;
     }
-    const status = s.closed ? (s.bonus_awarded ? pill('2x earned', 'ok') : pill('Finished', '')) : t >= a ? pill('Happening now', 'live') : pill(relDay(new Date(a)), 'soft');
-    return `<article class="card session ${opts.big ? 'big' : ''}">
-      <div class="row between"><h3>${actLabel(s)}</h3>${status}</div>
-      <p class="when">${esc(fmtWhen(new Date(a)))} · ${s.minutes} min · ${INTENSITY[s.intensity].label}${s.source === 'admin' ? ' · <span class="fine">suggested for you</span>' : ''}</p>
+    if (p?.status === 'accepted' && !p.checked_in_at && !s.closed) {
+      if (canCheckIn(s, u.id)) return `<button class="btn primary big" data-act="checkin" data-id="${s.id}">Check in &amp; log workout</button><p class="fine">Check in by ${fmtTime(new Date(w.closes))} to keep the 2x buddy bonus.</p>`;
+      if (t < w.opens) return `<div class="row between"><p class="fine">Check-in opens ${fmtTime(new Date(w.opens))}, ${fmtDur(w.opens - t)} from now.</p><button class="btn ghost sm" data-act="respond" data-id="${s.id}" data-yes="0">Can't make it</button></div>`;
+    }
+    if (p?.checked_in_at) {
+      const waiting = parts(s.id).filter((x) => x.status === 'accepted' && !x.checked_in_at);
+      if (s.bonus_awarded) return `<p class="good">2x buddy bonus earned 🎉</p>`;
+      if (waiting.length && !s.closed) return `<p class="fine">You're checked in. 2x bonus unlocks when ${joinList(waiting.map((x) => youOr(x.user_id)))} check${waiting.length > 1 ? '' : 's'} in.</p>`;
+    }
+    return '';
+  }
+  function sessionStatus(s) {
+    const t = nowMs(), a = sessionStart(s).getTime();
+    return s.closed ? (s.bonus_awarded ? pill('2x earned', 'ok') : pill('Finished', '')) : t >= a ? pill('Happening now', 'live') : pill(relDay(new Date(a)), 'soft');
+  }
+  function sessionCard(s) {
+    const a = sessionStart(s);
+    return `<article class="card session">
+      <div class="row between"><h3>${actLabel(s)}</h3>${sessionStatus(s)}</div>
+      <p class="when">${esc(fmtWhen(a))} · ${s.minutes} min · ${INTENSITY[s.intensity].label}${s.source === 'admin' ? ' · <span class="fine">suggested for you</span>' : ''}</p>
       ${partChips(s)}
-      ${action}
+      ${sessionAction(s)}
     </article>`;
+  }
+  const cardHead = (title, act) => `<button class="card-head" ${act}><h3>${title}</h3><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M9 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>`;
+  // The featured "Upcoming Friend Workouts" card: big friend portraits, then the session.
+  function featuredSession(s) {
+    const u = me(), a = sessionStart(s);
+    const others = parts(s.id).filter((p) => p.user_id !== u.id && ['accepted', 'invited'].includes(p.status)).map((p) => p);
+    const faces = (others.length ? others : parts(s.id)).slice(0, 3);
+    const names = others.filter((p) => p.status === 'accepted').map((p) => nameOf(p.user_id));
+    return `<div class="feature">
+        <div class="faces">${faces.map((p) => `<span class="face ${p.checked_in_at ? 'in' : p.status === 'accepted' ? 'going' : ''}">${avatar(user(p.user_id), 64)}</span>`).join('')}</div>
+        <p class="feature-title">${esc(ACTIVITIES[s.activity].label)}${names.length ? ` with ${esc(joinList(names))}` : ''}</p>
+        <p class="feature-when">${esc(relDay(a))} ${fmtTime(a)} · ${s.minutes} min · ${INTENSITY[s.intensity].label}</p>
+        ${sessionStatus(s)}
+      </div>
+      ${partChips(s)}
+      ${sessionAction(s)}`;
   }
   function viewHome() {
     const u = me(), g = myGroup(), t = nowMs();
-    const hr = now().getHours();
-    const hello = hr < 12 ? 'Good morning' : hr < 18 ? 'Good afternoon' : 'Good evening';
     const invites = mySessions(u.id, (s, p) => p.status === 'invited' && t < sessionStart(s).getTime());
     const next = nextSession(u.id);
     const wk = wkey(now());
-    const count = workoutsInWeek(u.id, wk).length;
+    const mine = workoutsInWeek(u.id, wk);
+    const count = mine.length;
+    const withFriends = mine.filter((w) => w.session_id && parts(w.session_id).filter((p) => p.checked_in_at).length >= 2).length;
+    const upcoming = mySessions(u.id, (s, p) => !s.closed && ['accepted', 'invited'].includes(p.status)).length;
     const st = streak(u.id);
     const crunch = isCrunch(u.id, wk);
     const v = villageLevel(g.id);
     const reminders = mySessions(u.id, (s, p) => p.status === 'accepted' && !s.closed && !p.checked_in_at && sessionStart(s).getTime() > t && sessionStart(s).getTime() - t <= REMIND_BEFORE);
     const feed = S.feed.filter((f) => f.group_id === g.id).slice(-12).reverse();
+    const spots = members(g.id).length > 1 ? suggestions(g.id, u.id).slice(0, 2) : [];
+    const size = members(g.id).length;
     return `
-      <section class="greet"><p class="fine">${esc(fmtDay(now()))}</p><h1 class="display sm">${hello}, ${esc(u.name)}</h1></section>
-      ${reminders.map((s) => `<div class="banner">⏰ Your ${ACTIVITIES[s.activity].label.toLowerCase()} starts at ${fmtTime(sessionStart(s))}, in ${fmtDur(sessionStart(s).getTime() - t)}.</div>`).join('')}
-      ${invites.length ? `<h2 class="h2">Invites for you</h2>${invites.map((s) => sessionCard(s)).join('')}` : ''}
-      <h2 class="h2">Next session</h2>
-      ${next ? sessionCard(next, { big: true }) : `<article class="card empty"><p>Nothing planned yet.</p><button class="btn primary" data-act="plan" data-plan="find">Find a time with friends</button></article>`}
-      <div class="grid2">
-        <article class="card goal">
-          <h3>This week</h3>
+      <article class="card">
+        ${cardHead('This Week', 'data-act="tab" data-tab="me"')}
+        <div class="stat3">
+          <div><b>${count}</b><small>Workouts</small></div>
+          <div><b>${withFriends}</b><small>with Friends</small></div>
+          <div><b>${upcoming}</b><small>Sessions</small></div>
+        </div>
+        <div class="goal-line">
           <div class="goal-dots">${Array.from({ length: Math.max(WEEKLY_GOAL, count) }, (_, i) => `<span class="${i < count ? 'on' : ''}"></span>`).join('')}</div>
-          <p class="fine">${count >= WEEKLY_GOAL ? 'Weekly goal met. Lovely.' : crunch ? 'Crunch week: streak paused, no pressure.' : `${WEEKLY_GOAL - count} more to reach your goal`}</p>
-        </article>
-        <article class="card goal">
-          <h3>Streak</h3>
-          <p class="big-num">${st}<small> week${st === 1 ? '' : 's'}</small></p>
-          <p class="fine">${crunch ? '⏸ paused this week' : 'Weeks with 2+ workouts'}</p>
-        </article>
-      </div>
-      <button class="btn block micro" data-act="micro">⚡ Squeeze in a micro-workout <small>5–15 min</small></button>
-      <article class="card village-peek" data-act="tab" data-tab="village">
-        <div class="row between"><h3>Your village</h3>${pill('Level ' + v.level, 'soft')}</div>
-        ${villageSVG({ size: v.size, placed: S.placed_items.filter((p) => p.group_id === g.id), interactive: false })}
-        <p class="fine">You have <b>${balance(u.id)}</b> pts to spend. Tap to decorate.</p>
+          <p class="fine">${count >= WEEKLY_GOAL ? 'Weekly goal met' : crunch ? 'Crunch week, streak paused' : `${WEEKLY_GOAL - count} more for your weekly goal`} · <b>${st}-week streak</b>${crunch ? ' ⏸' : ''}</p>
+        </div>
       </article>
-      <h2 class="h2">Group feed</h2>
-      <ul class="feed">${feed.map((f) => `<li><span class="ficon">${f.icon}</span><div><p>${esc(f.text)}</p><small>${esc(relDay(new Date(f.at)))} · ${fmtTime(new Date(f.at))}</small></div></li>`).join('') || '<li class="fine">Nothing yet. Your first session will show up here.</li>'}</ul>`;
+      ${reminders.map((s) => `<div class="banner">⏰ Your ${ACTIVITIES[s.activity].label.toLowerCase()} starts at ${fmtTime(sessionStart(s))}, in ${fmtDur(sessionStart(s).getTime() - t)}.</div>`).join('')}
+      ${invites.map((s) => `<article class="card invite">${cardHead('New Invite', 'data-act="plan" data-plan="sessions"')}${featuredSession(s)}</article>`).join('')}
+      <article class="card">
+        ${cardHead('Upcoming Friend Workouts', 'data-act="plan" data-plan="sessions"')}
+        ${next ? featuredSession(next) : `<div class="feature"><p class="fine">Nothing planned yet. Pick an open spot below, or find a time that suits everyone.</p></div>`}
+      </article>
+      <article class="card">
+        ${cardHead('Open Spots', 'data-act="plan" data-plan="find"')}
+        ${spots.length ? spots.map((s) => {
+          const a = ACTIVITIES[s.activity];
+          return `<div class="spot"><span class="spot-icon">${a.icon}</span><div class="grow"><p class="spot-title">${esc(a.label)} · ${esc(relDay(s.start))} ${fmtTime(s.start)}</p><p class="fine">${s.who.length === size ? 'Everyone is free' : `${s.who.length} of ${size} free`}</p></div><button class="btn sm" data-act="invite-spot" data-t="${s.start.getTime()}">Invite</button></div>`;
+        }).join('') : `<p class="fine">${size > 1 ? 'No shared free hours yet. Mark the hours you\'re free in Schedule.' : 'Invite a friend to see shared free hours.'}</p>`}
+      </article>
+      <button class="btn block micro" data-act="micro"><span>⚡ Squeeze in a micro-workout</span><small>5–15 min</small></button>
+      <article class="card village-peek" data-act="tab" data-tab="village">
+        ${cardHead(`Stage ${v.level}: ${STAGES[v.level - 1]}`, 'data-act="tab" data-tab="village"')}
+        <div class="peek-art">${villageSVG({ size: v.size, placed: S.placed_items.filter((p) => p.group_id === g.id), interactive: false, scenery: true })}</div>
+        <p class="fine">You have <b>${balance(u.id)}</b> pts to spend on your village.</p>
+      </article>
+      <article class="card">
+        <h3 class="feed-title">Activity Feed</h3>
+        <ul class="feed">${feed.map(feedItem).join('') || '<li class="fine">Nothing yet. Your first session will show up here.</li>'}</ul>
+      </article>`;
   }
+  function feedItem(f) {
+    const faces = (f.user_ids || []).map(user).filter(Boolean).slice(0, 2);
+    return `<li><span class="ficon">${faces.length ? `<span class="stack-faces">${faces.map((u) => avatar(u, 30)).join('')}</span>` : f.icon}</span><div><p>${esc(f.text)}</p><small>${f.icon} ${esc(relDay(new Date(f.at)))} · ${fmtTime(new Date(f.at))}</small></div></li>`;
+  }
+  const STAGES = ['Mossy Meadow', 'Coastal Path', 'Lantern Hollow', 'Ancient Oak Grove', 'Starlight Summit'];
 
   // ------------------------------------------------------------------
   // Plan: availability, suggestions, sessions
@@ -707,6 +757,18 @@
   // ------------------------------------------------------------------
   // Village
   // ------------------------------------------------------------------
+  // Circular progress ring with the village emblem in the middle.
+  function levelRing(pct, level) {
+    const r = 30, c = 2 * Math.PI * r;
+    return `<svg class="ring" viewBox="0 0 80 80" width="84" height="84" aria-label="Stage ${level}, ${pct}% to the next stage">
+      <circle cx="40" cy="40" r="${r}" fill="none" stroke="#CDBFD6" stroke-width="8"/>
+      <circle cx="40" cy="40" r="${r}" fill="none" stroke="#E8B54A" stroke-width="8" stroke-linecap="round" stroke-dasharray="${(c * pct / 100).toFixed(1)} ${c.toFixed(1)}" transform="rotate(-90 40 40)"/>
+      <circle cx="40" cy="40" r="22" fill="#8A7096"/>
+      <path d="M29 44 v-7 l11-8 11 8 v7 z" fill="#F6EFE4"/><path d="M27 37 L40 27 L53 37" fill="none" stroke="#E8B54A" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+      <rect x="37" y="38" width="6" height="6" rx="1" fill="#8A7096"/>
+      <text x="40" y="56" text-anchor="middle" font-size="9" font-weight="700" fill="#F6EFE4" font-family="Poppins, sans-serif">${level}</text>
+    </svg>`;
+  }
   function viewVillage() {
     const u = me(), g = myGroup(), v = villageLevel(g.id);
     const placed = S.placed_items.filter((p) => p.group_id === g.id);
@@ -715,40 +777,93 @@
     const pct = v.next ? Math.round(((v.earned - v.prev) / (v.next - v.prev)) * 100) : 100;
     const selItem = ui.sel && placed.find((p) => p.id === ui.sel);
     const placingItem = ui.placing && placed.find((p) => p.id === ui.placing);
+    const feed = S.feed.filter((f) => f.group_id === g.id).slice(-3).reverse();
     return `
-      <section class="row between"><div><h1 class="display sm">${esc(g.name)}</h1><p class="fine">Level ${v.level} village · ${v.size}×${v.size}</p></div><div class="balance"><b>${bal}</b><small>your pts</small></div></section>
-      <div class="levelbar" aria-label="Village level progress"><span style="width:${pct}%"></span></div>
-      <p class="fine">${v.next ? `${v.next - v.earned} more group points to reach level ${v.level + 1} and unlock new items.` : 'Top level reached. Your village is in full bloom.'}</p>
-      <div class="village-wrap ${placingItem ? 'is-placing' : ''}">
-        ${villageSVG({ size: v.size, placed, sel: ui.sel, placing: !!placingItem })}
-      </div>
-      ${placingItem ? `<div class="toolbar"><span>Tap a free tile to place your <b>${esc(itemName(placingItem.item_id))}</b>.</span><button class="btn sm ghost" data-act="cancel-place">Later</button></div>`
-        : selItem ? `<div class="toolbar"><span><b>${esc(itemName(selItem.item_id))}</b> selected. Tap an empty tile to move it.</span><button class="btn sm" data-act="store-item">Put away</button><button class="btn sm ghost" data-act="deselect">Done</button></div>`
-        : `<p class="fine center">Tap an item to move it.</p>`}
+      <article class="adventure ${placingItem ? 'is-placing' : ''}">
+        <div class="adv-head">
+          <button class="round-btn" data-act="tab" data-tab="home" aria-label="Back to dashboard"><svg viewBox="0 0 24 24" width="20" height="20"><path d="M15 6l-6 6 6 6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+          ${levelRing(pct, v.level)}
+          <span class="round-btn pts" title="Your points">${bal}<small>pts</small></span>
+        </div>
+        <p class="stage-name">Stage ${v.level}:<br>${esc(STAGES[v.level - 1])}</p>
+        <div class="adv-map">${villageSVG({ size: v.size, placed, sel: ui.sel, placing: !!placingItem, scenery: true })}</div>
+        <div class="adv-sheet">
+          <span class="handle"></span>
+          ${placingItem ? `<div class="toolbar"><span>Tap a free tile to place your <b>${esc(itemName(placingItem.item_id))}</b>.</span><button class="btn sm ghost" data-act="cancel-place">Later</button></div>`
+            : selItem ? `<div class="toolbar"><span><b>${esc(itemName(selItem.item_id))}</b> selected. Tap an empty tile to move it.</span><button class="btn sm" data-act="store-item">Put away</button><button class="btn sm ghost" data-act="deselect">Done</button></div>`
+            : `<h3>Activity Feed</h3><ul class="feed compact">${feed.map(feedItem).join('') || '<li class="fine">Workouts you do together show up here.</li>'}</ul>`}
+        </div>
+      </article>
+      <p class="fine center stage-hint">${v.next ? `${v.next - v.earned} more group points to reach Stage ${v.level + 1}: ${esc(STAGES[v.level])}.` : 'Final stage reached. Your village is in full bloom.'} Tap an item to move it.</p>
       ${stored.length ? `<h2 class="h2">In storage</h2><div class="shop">${stored.map((p) => `<button class="shop-item" data-act="place" data-id="${p.id}">${itemIcon(p.item_id, 56)}<span>${esc(itemName(p.item_id))}</span><small>Place</small></button>`).join('')}</div>` : ''}
       <h2 class="h2">Village shop</h2>
       <div class="shop">${VILLAGE_ITEMS.map((it) => {
         const locked = v.level < it.level, poor = bal < it.price;
-        return `<button class="shop-item${locked ? ' locked' : ''}" data-act="buy" data-item="${it.id}" ${locked || poor ? 'aria-disabled="true"' : ''}>${itemIcon(it.id, 56)}<span>${esc(it.name)}</span><small>${locked ? `🔒 Level ${it.level}` : `${it.price} pts`}</small></button>`;
+        return `<button class="shop-item${locked ? ' locked' : ''}" data-act="buy" data-item="${it.id}" ${locked || poor ? 'aria-disabled="true"' : ''}>${itemIcon(it.id, 56)}<span>${esc(it.name)}</span><small>${locked ? `🔒 Stage ${it.level}` : `${it.price} pts`}</small></button>`;
       }).join('')}</div>`;
   }
   const itemName = (id) => (VILLAGE_ITEMS.find((i) => i.id === id) || { name: id }).name;
 
   // ------------------------------------------------------------------
-  // Rewards
+  // Collections & rewards
   // ------------------------------------------------------------------
+  const divider = (t) => `<h4 class="divider"><span>${t}</span></h4>`;
   function viewRewards() {
-    const u = me(), bal = balance(u.id);
+    const u = me(), g = myGroup(), bal = balance(u.id), v = villageLevel(g.id);
     const mine = S.redemptions.filter((r) => r.user_id === u.id).slice().reverse();
+    const owned = {};
+    S.placed_items.filter((p) => p.bought_by === u.id).forEach((p) => (owned[p.item_id] = (owned[p.item_id] || 0) + 1));
+    const groupOwned = {};
+    S.placed_items.filter((p) => p.group_id === g.id).forEach((p) => (groupOwned[p.item_id] = (groupOwned[p.item_id] || 0) + 1));
+    const shown = VILLAGE_ITEMS.filter((it) => groupOwned[it.id] || it.level <= v.level).slice(0, 9);
+    const active = S.vouchers.filter((x) => x.active).sort((a, b) => a.price - b.price);
+    const goal = active.find((x) => x.price > bal) || active[active.length - 1];
+    const gpct = goal ? Math.min(100, Math.round((bal / goal.price) * 100)) : 0;
     return `
-      <section class="row between"><h1 class="display sm">Rewards</h1><div class="balance"><b>${bal}</b><small>your pts</small></div></section>
-      <p class="fine">Swap points for real treats. We send vouchers by email within a few days.</p>
-      ${S.vouchers.filter((v) => v.active).map((v) => `
+      <article class="card profile-card">
+        ${avatar(u, 56)}
+        <div class="grow"><h2 class="pname">${esc(u.name)}</h2><p class="fine">${esc(g.name)}</p></div>
+        <span class="pts-badge"><b>${bal}</b><small>pts</small></span>
+      </article>
+      <article class="card">
+        ${divider('Collected Objects')}
+        <div class="collect">${shown.map((it) => {
+          const n = owned[it.id] || 0, gn = groupOwned[it.id] || 0;
+          return `<button class="obj ${gn ? '' : 'empty'}" data-act="tab" data-tab="village">
+            ${gn ? `<i class="obj-count">${gn}</i>` : ''}
+            ${itemIcon(it.id, 64)}
+            <span>${esc(it.name)}</span>
+            <small>${n ? `${n} from you` : gn ? 'in your village' : `${it.price} pts`}</small>
+          </button>`;
+        }).join('')}</div>
+      </article>
+      ${goal ? `<article class="card">
+        <div class="tracker">
+          <div class="grow"><h3>Progress Tracker</h3>
+            <div class="track"><span style="width:${gpct}%"></span></div>
+            <div class="row between"><small class="fine">${Math.min(bal, goal.price)} / ${goal.price}</small><small class="fine"><b>${esc(goal.name)}</b></small></div>
+          </div>
+          <span class="gift" aria-hidden="true">🎁</span>
+        </div>
+      </article>` : ''}
+      ${divider('Unlockable Rewards')}
+      <div class="tiers">${LEVELS.map((pts, i) => {
+        const lvl = i + 1, done = v.level >= lvl;
+        const items = VILLAGE_ITEMS.filter((it) => it.level === lvl).map((it) => it.name);
+        return `<button class="tier ${done ? 'done' : ''}" data-act="tab" data-tab="village">
+          <span class="tier-icon">${done ? '⭐' : '🔒'}</span>
+          <span class="grow"><b>Tier ${lvl}: ${esc(STAGES[i])}</b><small>Unlocks ${esc(joinList(items))}</small><small>Requirement: ${pts ? `${pts} group pts` : 'start a group'}${done ? ' ✓' : ` · ${pts - v.earned} to go`}</small></span>
+          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M9 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>`;
+      }).join('')}</div>
+      ${divider('Real-World Rewards')}
+      <p class="fine center">Swap your points for real treats. We email vouchers within a few days.</p>
+      ${active.map((x) => `
         <article class="card voucher">
           <div class="vicon">🎁</div>
-          <div class="grow"><h3>${esc(v.name)}</h3><p class="fine">${esc(v.desc)}</p></div>
-          <div class="vprice"><b>${v.price}</b><small>pts</small>
-            <button class="btn sm ${bal >= v.price ? 'primary' : ''}" data-act="redeem" data-id="${v.id}" ${bal >= v.price ? '' : 'disabled'}>${bal >= v.price ? 'Redeem' : `${v.price - bal} to go`}</button></div>
+          <div class="grow"><h3>${esc(x.name)}</h3><p class="fine">${esc(x.desc)}</p></div>
+          <div class="vprice"><b>${x.price}</b><small>pts</small>
+            <button class="btn sm ${bal >= x.price ? 'teal' : ''}" data-act="redeem" data-id="${x.id}" ${bal >= x.price ? '' : 'disabled'}>${bal >= x.price ? 'Redeem' : `${x.price - bal} to go`}</button></div>
         </article>`).join('') || '<p class="fine">No rewards available right now.</p>'}
       <h2 class="h2">Your requests</h2>
       <ul class="list">${mine.map((r) => `<li><span>${esc(r.voucher_name)}</span><small>${esc(fmtDay(new Date(r.at)))} · ${r.price} pts</small>${r.status === 'sent' ? pill('Sent', 'ok') : pill('Pending', 'wait')}</li>`).join('') || '<li class="fine">Nothing redeemed yet.</li>'}</ul>`;
@@ -766,7 +881,7 @@
     });
     const link = `${location.origin}${location.pathname}?join=${g.code}`;
     return `
-      <section class="profile">${avatar(u, 64)}<div><h1 class="display sm">${esc(u.name)}</h1><p class="fine">${esc(g.name)} · ${earned(u.id)} pts earned all-time</p></div></section>
+      <article class="card profile-card">${avatar(u, 56)}<div class="grow"><h2 class="pname">${esc(u.name)}</h2><p class="fine">${esc(g.name)} · ${earned(u.id)} pts earned all-time</p></div></article>
       <article class="card">
         <div class="row between"><h3>Streak</h3><p class="big-num sm">${streak(u.id)}<small> weeks</small></p></div>
         <div class="weeks">${history.map((h) => `<div class="wk${h.n >= WEEKLY_GOAL ? ' met' : ''}${h.c ? ' crunch' : ''}${h.current ? ' now' : ''}" title="Week of ${h.k}: ${h.n} workouts${h.c ? ' (crunch)' : ''}"><span style="height:${Math.min(h.n, 4) * 25}%"></span></div>`).join('')}</div>
@@ -803,7 +918,7 @@
   function viewAdmin() {
     const tabs = [['overview', 'Overview'], ['sessions', 'Sessions'], ['points', 'Points'], ['vouchers', 'Rewards'], ['data', 'Export']];
     const body = { overview: adminOverview, sessions: adminSessions, points: adminPoints, vouchers: adminVouchers, data: adminData }[ui.admin]();
-    return `<section class="row between"><button class="btn ghost sm" data-act="tab" data-tab="me">‹ Back</button><h1 class="display sm">Admin</h1><span></span></section>
+    return `<div class="row between admin-top"><button class="btn sm" data-act="tab" data-tab="me">‹ Back</button></div>
       ${adminClock()}
       <div class="seg tabs scroll">${tabs.map(([k, l]) => `<button class="${ui.admin === k ? 'on' : ''}" data-act="admin-tab" data-k="${k}">${l}</button>`).join('')}</div>
       ${body}`;
@@ -1079,6 +1194,7 @@
     checkin: (d) => openModal({ kind: 'checkin', id: d.id }),
     micro: () => openModal({ kind: 'micro', preset: 0 }),
     'micro-preset': (d) => openModal({ kind: 'micro', preset: +d.i }),
+    'invite-spot': (d) => { const sug = suggestions(myGroup().id, S.currentUserId).find((x) => x.start.getTime() === +d.t); if (sug) openModal({ kind: 'invite', slot: sug }); },
     invite: (d) => { const sug = suggestions(myGroup().id, S.currentUserId); if (sug[+d.i]) openModal({ kind: 'invite', slot: sug[+d.i] }); },
     cell: (d) => {
       const ws = addDays(weekStart(now()), ui.weekOffset * 7);
