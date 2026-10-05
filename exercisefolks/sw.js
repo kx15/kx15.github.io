@@ -1,7 +1,7 @@
 // Service worker: makes ExerciseFolks installable, keeps the app shell
 // available offline, and shows session reminders as notifications.
-const CACHE = 'exercisefolks-v2';
-const SHELL = ['./', './index.html', './app.js', './art.js', './manifest.webmanifest', './icon.svg', './icon-192.png'];
+const CACHE = 'exercisefolks-v3';
+const SHELL = ['./', './index.html', './app.js?v=3', './art.js?v=3', './manifest.webmanifest', './icon.svg', './icon-192.png'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));
